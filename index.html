@@ -111,7 +111,7 @@ const GRAVITY = 22;
 const BASE_SPEED = 5.2, SPRINT_MULT = 1.55, JUMP_V = 8.2;
 const WEAPONS = {
   rifle:   { name: 'RIFLE',   mag: 30, fireCd: 0.105, reload: 1.5, dmg: 17,  hsMult: 2,   spread: 0.006,  pellets: 1, recoil: 0.012, kick: 0.06, sfx: 'shot' },
-  shotgun: { name: 'SHOTGUN', mag: 6,  fireCd: 0.75,  reload: 2.2, dmg: 9,   hsMult: 2,   spread: 0.07,   pellets: 8, recoil: 0.035, kick: 0.16, sfx: 'shotgun' },
+  shotgun: { name: 'SHOTGUN', mag: 6,  fireCd: 0.75,  reload: 2.2, dmg: 9,   hsMult: 2,   spread: 0.11,   pellets: 8, recoil: 0.035, kick: 0.16, sfx: 'shotgun' },
   sniper:  { name: 'SNIPER',  mag: 5,  fireCd: 1.1,   reload: 2.4, dmg: 95,  hsMult: 2.5, spread: 0.0008, pellets: 1, recoil: 0.02,  kick: 0.14, sfx: 'sniper' },
 };
 const WEAPON_ORDER = ['rifle', 'shotgun', 'sniper'];
@@ -416,6 +416,7 @@ function switchWeapon(name) {
   gunModels[curWeapon].visible = false;
   curWeapon = name;
   gunModels[name].visible = true;
+  aiming = false;   // scope only applies to the sniper
   player.reloading = false; player.reloadT = 0;
   reloadAnimT = -1;
   player.ammo = WEAPONS[name].mag;
@@ -560,6 +561,18 @@ let reloadAnimT = -1;   // counts down while the reload viewmodel animation play
 const cdHud = document.getElementById('cd-hud');
 const dmgEl = document.getElementById('dmg');
 const hitflashEl = document.getElementById('hitflash');
+const crosshairEl = document.getElementById('crosshair');
+// sniper scope overlay: circular vignette + fine crosshair
+const scopeOverlay = document.createElement('div');
+scopeOverlay.id = 'scope-overlay';
+scopeOverlay.style.cssText = 'position:fixed;inset:0;z-index:5;pointer-events:none;display:none;'
+  + 'background:radial-gradient(circle at center, transparent 34%, rgba(2,4,8,.97) 36%);';
+scopeOverlay.innerHTML =
+  '<div style="position:absolute;left:50%;top:50%;width:70vmin;height:70vmin;transform:translate(-50%,-50%);border-radius:50%;box-shadow:inset 0 0 60px rgba(0,0,0,.9), 0 0 0 3px rgba(120,180,255,.35)"></div>'
+  + '<div style="position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(160,200,255,.4)"></div>'
+  + '<div style="position:absolute;top:50%;left:0;height:1px;width:100%;background:rgba(160,200,255,.4)"></div>'
+  + '<div style="position:absolute;left:50%;top:50%;width:6px;height:6px;transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(255,90,61,.85)"></div>';
+document.body.appendChild(scopeOverlay);
 
 function setBanner(t) { bannerEl.textContent = t; }
 function setWave(n) {
@@ -607,13 +620,17 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 document.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
 let mouseDown = false;
+let aiming = false;   // RMB held with sniper = look through the scope
 document.addEventListener('mousedown', e => {
   if (e.button === 0 && state === 'playing' && document.pointerLockElement === renderer.domElement) mouseDown = true;
+  if (e.button === 2 && state === 'playing' && curWeapon === 'sniper') aiming = true;
 });
-document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; });
+document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; if (e.button === 2) aiming = false; });
+document.addEventListener('contextmenu', e => e.preventDefault());
+const BASE_FOV = 75, SCOPE_FOV = 24;    // fixed zoom setting for the sniper scope
 document.addEventListener('mousemove', e => {
   if (document.pointerLockElement !== renderer.domElement) return;
-  const sens = 0.0021;
+  const sens = 0.0021 * (camera.fov / BASE_FOV);   // aim slows proportionally when scoped
   player.yaw -= e.movementX * sens;
   player.pitch -= e.movementY * sens;
   const lim = Math.PI / 2 - 0.05;
@@ -665,7 +682,12 @@ function quitToMenu() {
   for (const t of tracerPool) t.visible = false;
   for (const s of sparkPool) s.visible = false;
   player.reloading = false; player.reloadT = 0;
-  reloadAnimT = -1;                       // cancel any in-flight reload animation
+  reloadAnimT = -1;
+  aiming = false;
+  scopeOverlay.style.display = 'none';
+  crosshairEl.style.display = 'block';
+  camera.fov = BASE_FOV; camera.updateProjectionMatrix();
+  gun.visible = true;
   score = 0; kills = 0; wave = 0; spawnQueue = 0;
   mouseDown = false;
   state = 'menu';
@@ -1016,6 +1038,16 @@ function updatePlayer(dt) {
                    -0.5 + k * 0.12);
   gun.rotation.x = k * 0.25 + rTilt;
   gun.rotation.z = rRoll;
+  // sniper scope: zoom FOV, hide viewmodel, show scope overlay
+  const scoped = aiming && curWeapon === 'sniper';
+  const targetFov = scoped ? SCOPE_FOV : BASE_FOV;
+  if (camera.fov !== targetFov) {
+    camera.fov += (targetFov - camera.fov) * Math.min(1, 14 * dt);
+    camera.updateProjectionMatrix();
+  }
+  gun.visible = !scoped;
+  scopeOverlay.style.display = scoped ? 'block' : 'none';
+  crosshairEl.style.display = scoped ? 'none' : 'block';
   camera.rotation.set(player.pitch, player.yaw, 0);
 }
 
