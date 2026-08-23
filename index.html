@@ -770,10 +770,6 @@ document.addEventListener('keydown', e => {
       if (e.code === 'Digit1') switchWeapon('rifle');
       if (e.code === 'Digit2') switchWeapon('shotgun');
       if (e.code === 'Digit3') switchWeapon('sniper');
-      if (e.code === 'KeyE' || e.code === 'Digit4') {
-        const i = WEAPON_ORDER.indexOf(curWeapon);
-        switchWeapon(WEAPON_ORDER[(i + 1) % WEAPON_ORDER.length]);
-      }
     }
   }
   if (e.code === 'Escape' && (state === 'playing' || state === 'paused')) togglePause();
