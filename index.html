@@ -33,6 +33,7 @@
   #kill-banner.show{animation:kb-pop .3s cubic-bezier(.2,1.5,.4,1) both, kb-out .35s ease 1.05s forwards, kb-glow 1s ease-in-out .35s}
   #kill-banner.triple{font-size:64px}
   #kill-banner.multi{font-size:70px;background:linear-gradient(180deg,#eaf6ff 8%,#7fc0ff 46%,#2f7bff 74%,#123a8f 100%);
+    -webkit-background-clip:text;background-clip:text;   /* re-assert: the background shorthand above resets clip to border-box */
     filter:drop-shadow(0 2px 1px rgba(10,20,60,.55)) drop-shadow(0 0 18px rgba(70,140,255,.9)) drop-shadow(0 0 46px rgba(40,90,255,.45))}
   @keyframes kb-pop{0%{opacity:0;transform:translate(-50%,-50%) scale(.35)}55%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
   @keyframes kb-out{to{opacity:0;transform:translate(-50%,-50%) scale(1.05)}}
