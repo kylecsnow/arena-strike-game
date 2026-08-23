@@ -120,7 +120,7 @@ const GRAVITY = 22;
 const BASE_SPEED = 5.2, SPRINT_MULT = 1.55, JUMP_V = 8.2;
 const WEAPONS = {
   rifle:   { name: 'RIFLE',   mag: 30, fireCd: 0.105, reload: 1.5, dmg: 17,  hsMult: 2,   spread: 0.006,  pellets: 1, recoil: 0.012, kick: 0.06, sfx: 'shot' },
-  shotgun: { name: 'SHOTGUN', mag: 6,  fireCd: 0.75,  reload: 2.2, dmg: 9,   hsMult: 2,   spread: 0.11,   pellets: 8, recoil: 0.035, kick: 0.16, sfx: 'shotgun' },
+  shotgun: { name: 'SHOTGUN', mag: 6,  fireCd: 0.75,  reload: 2.2, dmg: 12,  hsMult: 2,   spread: 0.11,   pellets: 8, recoil: 0.035, kick: 0.16, sfx: 'shotgun' },
   sniper:  { name: 'SNIPER',  mag: 5,  fireCd: 1.1,   reload: 2.4, dmg: 95,  hsMult: 2.5, spread: 0.0008, pellets: 1, recoil: 0.02,  kick: 0.14, sfx: 'sniper' },
 };
 const WEAPON_ORDER = ['rifle', 'shotgun', 'sniper'];
@@ -765,16 +765,22 @@ function tryShoot() {
 
     const hits = raycaster.intersectObjects(targets, false);
     let end = origin.clone().add(dir.clone().multiplyScalar(120));
-    if (hits.length) {
-      const h = hits[0];
-      end = h.point;
+    const pierce = curWeapon === 'sniper';   // sniper punches through enemies; obstacles still block
+    const hitEnemies = new Set();
+    for (const h of hits) {
       const e = findEnemyOf(h.object);
-      if (e && !e.userData.dead) {
+      if (e) {
+        if (hitEnemies.has(e)) continue;     // damage each enemy at most once per shot
+        hitEnemies.add(e);
+        end = h.point;
         const headshot = h.object === e.userData.headMesh;
         const dmg = headshot ? w.dmg * w.hsMult : w.dmg;
         damageEnemy(e, dmg, h.point, headshot);
+        if (!pierce) break;                  // non-piercing weapons stop at the first enemy
       } else {
+        end = h.point;                       // obstacle: spark and the shot is blocked
         fireSparks(end, 5, 0xffc46a);
+        break;
       }
     }
     fireTracer(muzzle.getWorldPosition(new THREE.Vector3()), end);
