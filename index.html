@@ -1330,9 +1330,12 @@ bannerEl.id = 'banner';
 bannerEl.style.cssText = 'position:fixed;left:50%;top:32%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;font-size:44px;font-weight:800;letter-spacing:10px;color:#cfe6ff;text-shadow:0 0 30px rgba(80,160,255,.8);opacity:0;display:none';
 document.body.appendChild(bannerEl);
 
-// multi-kill banner (DOUBLE/TRIPLE/MULTI KILL) — created here so showKillBanner can reference it
+// multi-kill banner (DOUBLE/TRIPLE/MULTI KILL) — created here so showKillBanner can reference it.
+// NOTE: no inline display:none here — visibility is driven purely by the CSS
+// opacity:0 default plus the .show class animations (an inline display:none
+// would override .show forever and the banner would never appear).
 killBannerEl = document.getElementById('kill-banner') || (() => {
-  const d = document.createElement('div'); d.id = 'kill-banner'; d.style.display = 'none';
+  const d = document.createElement('div'); d.id = 'kill-banner';
   document.body.appendChild(d); return d;
 })();
 
