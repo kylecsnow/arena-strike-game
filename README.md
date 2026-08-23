@@ -27,7 +27,7 @@ Click **Enter the Arena** to start, then click the canvas to lock the mouse for 
 | Shift | Sprint |
 | Space | Jump |
 | R | Reload |
-| 1 / 2 / 3 | Switch weapons (rifle, shotgun, sniper) |
+| Tab / 1 / 2 / 3 | Switch weapons (Tab cycles rifle → shotgun → sniper) |
 | Esc | Pause |
 
 ## Gameplay
