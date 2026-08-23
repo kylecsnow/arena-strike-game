@@ -42,6 +42,23 @@ Three weapons are available:
 
 Headshots deal extra damage. Your score tracks kills (with headshot multipliers), waves survived, and wave-clear bonuses. The run ends when your health reaches zero.
 
+## Debug mode
+
+The main menu has a **DEBUG MODE** button: a sandbox run with hotkey toggles for testing features by hand (a gold frame around the screen marks it as active). Toggles start OFF every time you enter debug mode.
+
+| Key | Action |
+|-----|--------|
+| 1 | God mode — take no damage |
+| 2 | Infinite ammo |
+| 3 | One-shot kills |
+| 4 | Bullet time — world at 0.3× speed, player at normal speed |
+| 5 | Freeze enemies in place |
+| 6 | No spread / recoil / kick |
+| 7 / 8 | Spawn a bot / tank |
+| 9 / 0 | Skip to next wave / clear the current wave |
+| F1 | Show/hide the debug panel |
+| F2 | Exit debug mode back to the main menu |
+
 ## Project structure
 
 This is a minimal, zero-build setup:

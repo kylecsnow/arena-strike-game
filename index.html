@@ -19,6 +19,34 @@
   .btn:hover{filter:brightness(1.12)}
   #stats{display:flex;gap:34px;margin-top:14px;font-size:14px;color:#9fb8d8}
   #stats b{color:#fff;font-size:20px;display:block}
+  /* multi-kill banner (double/triple/multi kill from a single action) */
+  #kill-banner{position:fixed;left:50%;top:24%;transform:translate(-50%,-50%);z-index:7;pointer-events:none;
+    font-weight:900;font-size:56px;letter-spacing:10px;white-space:nowrap;text-transform:uppercase;
+    background:linear-gradient(180deg,#fff7cf 8%,#ffd24a 46%,#f79a12 74%,#c05e00 100%);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 2px 1px rgba(80,30,0,.55)) drop-shadow(0 0 16px rgba(255,170,30,.85)) drop-shadow(0 0 42px rgba(255,120,0,.4));
+    opacity:0}
+  #kill-banner::before{content:"";position:absolute;left:50%;top:50%;width:150%;height:180%;transform:translate(-50%,-50%);
+    background:radial-gradient(closest-side,rgba(255,150,20,.30),transparent 70%);pointer-events:none;z-index:-1}
+  #kill-banner::after{content:"";position:absolute;inset:0;transform:translateX(-140%) skewX(-20deg);
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:kb-shine .55s ease .35s both}
+  #kill-banner.show{animation:kb-pop .3s cubic-bezier(.2,1.5,.4,1) both, kb-out .35s ease 1.05s forwards, kb-glow 1s ease-in-out .35s}
+  #kill-banner.triple{font-size:64px}
+  #kill-banner.multi{font-size:70px;background:linear-gradient(180deg,#eaf6ff 8%,#7fc0ff 46%,#2f7bff 74%,#123a8f 100%);
+    filter:drop-shadow(0 2px 1px rgba(10,20,60,.55)) drop-shadow(0 0 18px rgba(70,140,255,.9)) drop-shadow(0 0 46px rgba(40,90,255,.45))}
+  @keyframes kb-pop{0%{opacity:0;transform:translate(-50%,-50%) scale(.35)}55%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+  @keyframes kb-out{to{opacity:0;transform:translate(-50%,-50%) scale(1.05)}}
+  @keyframes kb-shine{to{transform:translateX(140%) skewX(-20deg)}}
+  @keyframes kb-glow{0%,100%{filter:drop-shadow(0 0 12px rgba(255,150,20,.5))}50%{filter:drop-shadow(0 0 30px rgba(255,190,40,.95))}}
+  /* debug mode */
+  .btn.secondary{background:linear-gradient(180deg,#ffd98a,#f79a12);box-shadow:0 6px 24px rgba(247,154,18,.35)}
+  #debug-panel{position:fixed;top:14px;right:14px;z-index:8;background:rgba(8,12,18,.78);border:1px solid rgba(255,190,60,.45);border-radius:10px;padding:10px 12px;color:#ffe9c4;font-size:12px;letter-spacing:.5px;min-width:210px;text-align:left}
+  #debug-panel .dbg-title{font-weight:800;letter-spacing:3px;color:#ffc44d;margin-bottom:6px;font-size:13px}
+  #debug-panel .dbg-row{display:flex;align-items:center;gap:8px;padding:2.5px 0;color:#e8dcc0}
+  #debug-panel .dbg-key{display:inline-block;min-width:20px;text-align:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,190,60,.35);border-radius:4px;padding:1px 4px;font-weight:700;color:#ffd98a}
+  #debug-panel .dbg-val{margin-left:auto;color:#8fa3bd;font-weight:700}
+  #debug-panel .dbg-val.on{color:#5ad87a}
+  #debug-frame{position:fixed;inset:0;pointer-events:none;z-index:6;border:2px solid rgba(255,190,60,.30);box-shadow:inset 0 0 40px rgba(255,170,40,.08)}
 </style>
 </head>
 <body>
@@ -38,6 +66,8 @@
   <div class="keys">
     <div><b>WASD</b><br>move</div>
     <div><b>MOUSE</b><br>aim &amp; shoot</div>
+    <div><b>RMB</b><br>iron sights / scope</div>
+    <div><b>CTRL</b><br>crouch</div>
     <div><b>SHIFT</b><br>sprint</div>
     <div><b>SPACE</b><br>jump</div>
     <div><b>R</b><br>reload</div>
@@ -49,9 +79,29 @@
     <div><b>SHOTGUN</b><br>8 pellets / 6 rds</div>
     <div><b>SNIPER</b><br>one-shot / 5 rds</div>
   </div>
-  <button class="btn" id="playBtn">ENTER THE ARENA</button>
+  <div style="display:flex;gap:18px;margin-top:26px">
+    <button class="btn" id="playBtn" style="margin-top:0">ENTER THE ARENA</button>
+    <button class="btn secondary" id="debugBtn" style="margin-top:0">DEBUG MODE</button>
+  </div>
   <p style="margin-top:22px;font-size:12px">Click the canvas to lock your mouse. Best played fullscreen, sound on.</p>
 </div>
+
+<div id="debug-panel" style="display:none">
+  <div class="dbg-title">DEBUG MODE</div>
+  <div class="dbg-row"><span class="dbg-key">1</span> god mode <span class="dbg-val" id="dbg-v-god">OFF</span></div>
+  <div class="dbg-row"><span class="dbg-key">2</span> infinite ammo <span class="dbg-val" id="dbg-v-ammo">OFF</span></div>
+  <div class="dbg-row"><span class="dbg-key">3</span> one-shot kills <span class="dbg-val" id="dbg-v-kill">OFF</span></div>
+  <div class="dbg-row"><span class="dbg-key">4</span> bullet time <span class="dbg-val" id="dbg-v-time">OFF</span></div>
+  <div class="dbg-row"><span class="dbg-key">5</span> freeze enemies <span class="dbg-val" id="dbg-v-freeze">OFF</span></div>
+  <div class="dbg-row"><span class="dbg-key">6</span> no spread/recoil <span class="dbg-val" id="dbg-v-acc">OFF</span></div>
+  <div style="border-top:1px solid rgba(255,190,60,.25);margin:6px 0"></div>
+  <div class="dbg-row"><span class="dbg-key">7</span> spawn bot &nbsp;·&nbsp; <span class="dbg-key">8</span> spawn tank</div>
+  <div class="dbg-row"><span class="dbg-key">9</span> skip wave &nbsp;·&nbsp; <span class="dbg-key">0</span> clear wave</div>
+  <div style="border-top:1px solid rgba(255,190,60,.25);margin:6px 0"></div>
+  <div class="dbg-row"><span class="dbg-key">F1</span> toggle this panel</div>
+  <div class="dbg-row"><span class="dbg-key">F2</span> exit debug → menu</div>
+</div>
+<div id="debug-frame" style="display:none"></div>
 
 <div class="overlay" id="gameover" style="display:none">
   <h1 style="background:linear-gradient(180deg,#ffd9b8,#ff5a3d);-webkit-background-clip:text;background-clip:text">YOU DIED</h1>
@@ -64,6 +114,8 @@
   <div class="keys">
     <div><b>WASD</b><br>move</div>
     <div><b>MOUSE</b><br>aim &amp; shoot</div>
+    <div><b>RMB</b><br>iron sights / scope</div>
+    <div><b>CTRL</b><br>crouch</div>
     <div><b>SHIFT</b><br>sprint</div>
     <div><b>SPACE</b><br>jump</div>
     <div><b>R</b><br>reload</div>
@@ -116,6 +168,7 @@
 // ---------- constants ----------
 const ARENA_HALF = 33;           // playable square half-extent
 const PLAYER_H = 1.62;           // eye height
+const CROUCH_H = 1.05;          // eye height while crouching (CTRL)
 const GRAVITY = 22;
 const BASE_SPEED = 5.2, SPRINT_MULT = 1.55, JUMP_V = 8.2;
 const WEAPONS = {
@@ -145,7 +198,23 @@ function sfx(type) {
   try {
     const a = audio(); const t = a.currentTime;
     const g = a.createGain(); g.connect(a.destination);
-    if (type === 'shot') {
+    if (type === 'combo') {
+      const base = 660;
+      const step = 0.09;
+      const n = 4;
+      for (let i = 0; i < n; i++) {
+        const o = a.createOscillator(); o.type = 'triangle';
+        o.frequency.value = (base * Math.pow(2, i * 0.5 / 3)) * (1 + i * 0.12);
+        const og = a.createGain(); og.connect(a.destination);
+        og.gain.setValueAtTime(0.14, t + i * step); og.gain.exponentialRampToValueAtTime(0.001, t + i * step + 0.32);
+        o.connect(og); o.start(t + i * step); o.stop(t + i * step + 0.34);
+      }
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.5);
+      const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2200;
+      s.connect(f); f.connect(g);
+      g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      s.start(t);
+    } else if (type === 'shot') {
       const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.16);
       const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(300, t + 0.14);
       s.connect(f); f.connect(g);
@@ -425,7 +494,7 @@ function switchWeapon(name) {
   gunModels[curWeapon].visible = false;
   curWeapon = name;
   gunModels[name].visible = true;
-  aiming = false;   // scope only applies to the sniper
+  aiming = false;   // RMB held: sniper = scope, rifle/shotgun = iron sights (slight zoom)
   player.reloading = false; player.reloadT = 0;
   reloadAnimT = -1;
   player.ammo = WEAPONS[name].mag;
@@ -565,12 +634,63 @@ let score = 0, wave = 0, kills = 0;
 let spawnQueue = 0, spawnT = 0;
 let waveBanner = 0;
 let gunKick = 0;
+let shotKills = 0;   // enemies killed by the current shot/action (one tryShoot call); read to award multi-kill banners
+let killBannerT = null;
+let killBannerEl = null;   // the #kill-banner element, assigned in the banner section below
 let reloadAnimT = -1;   // counts down while the reload viewmodel animation plays; -1 = idle
 
 const cdHud = document.getElementById('cd-hud');
 const dmgEl = document.getElementById('dmg');
 const hitflashEl = document.getElementById('hitflash');
 const crosshairEl = document.getElementById('crosshair');
+
+// ---------- debug mode ----------
+// Sandbox toggles for testing features by hand. Started from the main menu
+// ("DEBUG MODE"); everything is off until toggled with the hotkeys in the panel.
+const dbg = {
+  active: false,
+  god: false,
+  ammo: false,
+  oneshot: false,
+  slowmo: false,
+  freeze: false,
+  accuracy: false,   // no spread / recoil / kick
+};
+const dbgPanel = document.getElementById('debug-panel');
+const dbgFrame = document.getElementById('debug-frame');
+const dbgVals = { god: document.getElementById('dbg-v-god'), ammo: document.getElementById('dbg-v-ammo'), kill: document.getElementById('dbg-v-kill'), time: document.getElementById('dbg-v-time'), freeze: document.getElementById('dbg-v-freeze'), acc: document.getElementById('dbg-v-acc') };
+function dbgRefresh() {
+  dbgVals.god.textContent = dbg.god ? 'ON' : 'OFF';
+  dbgVals.ammo.textContent = dbg.ammo ? 'ON' : 'OFF';
+  dbgVals.kill.textContent = dbg.oneshot ? 'ON' : 'OFF';
+  dbgVals.time.textContent = dbg.slowmo ? 'ON' : 'OFF';
+  dbgVals.freeze.textContent = dbg.freeze ? 'ON' : 'OFF';
+  dbgVals.acc.textContent = dbg.accuracy ? 'ON' : 'OFF';
+  for (const k in dbgVals) dbgVals[k].classList.toggle('on', !!({ god: dbg.god, ammo: dbg.ammo, kill: dbg.oneshot, time: dbg.slowmo, freeze: dbg.freeze, acc: dbg.accuracy })[k]);
+}
+function dbgClear() {
+  // turn every toggle off (called when entering/leaving debug mode)
+  for (const k of ['god', 'ammo', 'oneshot', 'slowmo', 'freeze', 'accuracy']) dbg[k] = false;
+  dbgRefresh();
+}
+function startDebugMode() {
+  try { audio(); } catch (e) {}
+  dbg.active = true;
+  dbgClear();
+  resetGame();
+  state = 'playing';
+  menuEl.style.display = 'none';
+  overEl.style.display = 'none';
+  pauseEl.style.display = 'none';
+  dbgPanel.style.display = 'block';
+  dbgFrame.style.display = 'block';
+  if (renderer.domElement.requestPointerLock) renderer.domElement.requestPointerLock().catch?.(() => {});
+}
+function exitDebugMode() { quitToMenu(); }
+function dbgHideChrome() {
+  dbgPanel.style.display = 'none';
+  dbgFrame.style.display = 'none';
+}
 // sniper scope overlay: circular vignette + fine crosshair
 const scopeOverlay = document.createElement('div');
 scopeOverlay.id = 'scope-overlay';
@@ -614,29 +734,54 @@ const keys = {};
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyR' && state === 'playing') startReload();
+  // debug-mode hotkeys work in any state while debug mode is active
+  if (dbg.active) {
+    if (e.code === 'F1') { e.preventDefault(); dbgPanel.style.display = dbgPanel.style.display === 'none' ? 'block' : 'none'; }
+    else if (e.code === 'F2') exitDebugMode();
+    else if (state === 'playing') {
+      const t = k => { dbg[k] = !dbg[k]; dbgRefresh(); };
+      if (e.code === 'Digit1' && !e.repeat) t('god');
+      else if (e.code === 'Digit2' && !e.repeat) t('ammo');
+      else if (e.code === 'Digit3' && !e.repeat) t('oneshot');
+      else if (e.code === 'Digit4' && !e.repeat) t('slowmo');
+      else if (e.code === 'Digit5' && !e.repeat) t('freeze');
+      else if (e.code === 'Digit6' && !e.repeat) t('accuracy');
+      else if (e.code === 'Digit7' && !e.repeat) spawnEnemy('bot');
+      else if (e.code === 'Digit8' && !e.repeat) spawnEnemy('tank');
+      else if (e.code === 'Digit9' && !e.repeat) setWave(wave + 1);
+      else if (e.code === 'Digit0' && !e.repeat) {
+        for (const en of enemies) en.userData.dead = true;
+        spawnQueue = 0;
+      }
+    }
+  }
   if (state === 'playing') {
-    if (e.code === 'Digit1') switchWeapon('rifle');
-    if (e.code === 'Digit2') switchWeapon('shotgun');
-    if (e.code === 'Digit3') switchWeapon('sniper');
-    if (e.code === 'KeyQ' || e.code === 'Digit4') {
-      const i = WEAPON_ORDER.indexOf(curWeapon);
-      switchWeapon(WEAPON_ORDER[(i + 1) % WEAPON_ORDER.length]);
+    if (!dbg.active || !['Digit1','Digit2','Digit3','Digit4','Digit5','Digit0'].includes(e.code)) {
+      if (e.code === 'Digit1') switchWeapon('rifle');
+      if (e.code === 'Digit2') switchWeapon('shotgun');
+      if (e.code === 'Digit3') switchWeapon('sniper');
+      if (e.code === 'KeyQ' || e.code === 'Digit4') {
+        const i = WEAPON_ORDER.indexOf(curWeapon);
+        switchWeapon(WEAPON_ORDER[(i + 1) % WEAPON_ORDER.length]);
+      }
     }
   }
   if (e.code === 'Escape' && (state === 'playing' || state === 'paused')) togglePause();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
-document.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+document.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouseDown = false; aiming = false; });
 
 let mouseDown = false;
-let aiming = false;   // RMB held with sniper = look through the scope
+let aiming = false;   // RMB held: sniper = scope, rifle/shotgun = iron sights (slight zoom)
 document.addEventListener('mousedown', e => {
   if (e.button === 0 && state === 'playing' && document.pointerLockElement === renderer.domElement) mouseDown = true;
-  if (e.button === 2 && state === 'playing' && curWeapon === 'sniper') aiming = true;
+  if (e.button === 2 && state === 'playing') aiming = true;   // scope (sniper) or iron sights (rifle/shotgun)
 });
 document.addEventListener('mouseup', e => { if (e.button === 0) mouseDown = false; if (e.button === 2) aiming = false; });
 document.addEventListener('contextmenu', e => e.preventDefault());
 const BASE_FOV = 75, SCOPE_FOV = 24;    // fixed zoom setting for the sniper scope
+const IRON_FOV = 58;                    // RMB iron sights: a *slight* zoom for rifle & shotgun
+const CROUCH_SPEED_MULT = 0.45;        // CTRL crouch: slow, deliberate movement
 document.addEventListener('mousemove', e => {
   if (document.pointerLockElement !== renderer.domElement) return;
   const sens = 0.0021 * (camera.fov / BASE_FOV);   // aim slows proportionally when scoped
@@ -682,8 +827,12 @@ function startGame() {
 }
 document.getElementById('playBtn').addEventListener('click', startGame);
 document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('debugBtn').addEventListener('click', startDebugMode);
 function quitToMenu() {
   // back to the boot-up state: clear the arena, drop overlays, show main menu
+  dbg.active = false;
+  dbgClear();
+  dbgHideChrome();
   for (let i = enemies.length - 1; i >= 0; i--) scene.remove(enemies[i]);
   enemies.length = 0;
   for (const s of shots) scene.remove(s.mesh);
@@ -699,6 +848,8 @@ function quitToMenu() {
   gun.visible = true;
   score = 0; kills = 0; wave = 0; spawnQueue = 0;
   mouseDown = false;
+  if (killBannerT) { clearTimeout(killBannerT); killBannerT = null; }
+  if (killBannerEl) { killBannerEl.classList.remove('show'); }
   state = 'menu';
   pauseEl.style.display = 'none';
   overEl.style.display = 'none';
@@ -739,9 +890,11 @@ function tryShoot() {
   if (player.reloading || player.fireCd > 0) return;
   const w = WEAPONS[curWeapon];
   if (player.ammo <= 0) { sfx('dry'); startReload(); return; }
-  player.ammo--;
+  if (!(dbg.active && dbg.ammo)) player.ammo--;   // debug: infinite ammo keeps the mag topped up
+  else player.ammo = w.mag;
   player.fireCd = w.fireCd;
   sfx(w.sfx);
+  shotKills = 0;   // reset per action: one tryShoot() call = one shot, regardless of pellets/pierce
 
   // camera direction from yaw/pitch
   const baseDir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
@@ -754,7 +907,7 @@ function tryShoot() {
   for (let p = 0; p < w.pellets; p++) {
     // per-pellet spread: shotgun wide cone, sniper near-pinpoint, rifle tight
     const dir = baseDir.clone();
-    const spread = p === 0 ? w.spread * 0.5 : w.spread;
+    const spread = (dbg.active && dbg.accuracy) ? 0 : (p === 0 ? w.spread * 0.5 : w.spread);
     dir.x += (Math.random() - 0.5) * spread;
     dir.y += (Math.random() - 0.5) * spread;
     dir.z += (Math.random() - 0.5) * spread;
@@ -770,11 +923,13 @@ function tryShoot() {
     for (const h of hits) {
       const e = findEnemyOf(h.object);
       if (e) {
+        if (e.userData.dead) continue;        // skip corpses so later pellets don't re-hit them
         if (hitEnemies.has(e)) continue;     // damage each enemy at most once per shot
         hitEnemies.add(e);
         end = h.point;
         const headshot = h.object === e.userData.headMesh;
-        const dmg = headshot ? w.dmg * w.hsMult : w.dmg;
+        let dmg = headshot ? w.dmg * w.hsMult : w.dmg;
+        if (dbg.active && dbg.oneshot) dmg = Infinity;   // debug: one-shot kills
         damageEnemy(e, dmg, h.point, headshot);
         if (!pierce) break;                  // non-piercing weapons stop at the first enemy
       } else {
@@ -787,12 +942,31 @@ function tryShoot() {
   }
 
   // recoil + flash (scaled by weapon)
-  gunKick = Math.min(gunKick + w.kick, 0.2);
-  player.pitch = Math.min(player.pitch + w.recoil, Math.PI / 2 - 0.05);
+  const noAcc = dbg.active && dbg.accuracy;
+  gunKick = noAcc ? 0 : Math.min(gunKick + w.kick, 0.2);
+  if (!noAcc) player.pitch = Math.min(player.pitch + w.recoil, Math.PI / 2 - 0.05);
   flashT = curWeapon === 'sniper' ? 0.08 : 0.05;
   flash.visible = true;
   flash.scale.setScalar((curWeapon === 'shotgun' ? 1.6 : 0.8) + Math.random() * 0.6);
   flashLight.intensity = curWeapon === 'rifle' ? 3.2 : 5;
+
+  // Multi-kill reward: a single action (one shot) that kills 2+ enemies
+  if (shotKills >= 2) {
+    const label = shotKills === 2 ? 'DOUBLE KILL' : shotKills === 3 ? 'TRIPLE KILL' : 'MULTI KILL';
+    showKillBanner(label, shotKills);
+  }
+}
+function showKillBanner(label, count) {
+  if (!killBannerEl) return;
+  killBannerEl.textContent = label;
+  killBannerEl.classList.remove('double', 'triple', 'multi');
+  killBannerEl.classList.add(count >= 4 ? 'multi' : (count === 3 ? 'triple' : 'double'));
+  killBannerEl.classList.remove('show');
+  void killBannerEl.offsetWidth;   // force reflow so the animation restarts
+  killBannerEl.classList.add('show');
+  sfx('combo');
+  if (killBannerT) clearTimeout(killBannerT);
+  killBannerT = setTimeout(() => killBannerEl.classList.remove('show'), 1500);
 }
 function findEnemyOf(obj) {
   let o = obj;
@@ -803,6 +977,7 @@ function findEnemyOf(obj) {
   return null;
 }
 function damageEnemy(e, dmg, point, headshot) {
+  if (e.userData.dead) return;   // idempotent: a corpse takes no more damage (multi-pellet safety)
   e.userData.hp -= dmg;
   e.userData.hurtT = 0.15;
   const eMat = e.children[0].material;
@@ -815,6 +990,7 @@ function damageEnemy(e, dmg, point, headshot) {
     e.userData.dead = true;
     e.userData.deathT = 0;
     kills++;
+    shotKills++;
     score += e.userData.score * (headshot ? 2 : 1);
     sfx('kill');
   }
@@ -842,6 +1018,13 @@ function updateEnemies(dt) {
     _tmpV.copy(eye).sub(e.position); _tmpV.y = 0;
     const dist = _tmpV.length();
     e.rotation.y = Math.atan2(_tmpV.x, _tmpV.z);
+    if (dbg.active && dbg.freeze) {   // debug: statues — no movement, no shooting
+      if (ud.hurtT > 0) {
+        ud.hurtT -= dt;
+        if (ud.hurtT <= 0) e.children[0].material.emissive.setHex(0x000000);
+      }
+      continue;
+    }
 
     // movement: keep 8-16 m range, strafe orbit
     const want = ud.type === 'tank' ? 11 : 14;
@@ -958,7 +1141,7 @@ function updateShots(dt) {
 }
 
 function damagePlayer(dmg) {
-  if (!player.alive) return;
+  if (!player.alive || (dbg.active && dbg.god)) return;
   player.hp -= dmg;
   player.hurtT = 0.3;
   sfx('hurt');
@@ -989,7 +1172,9 @@ function collidePlayer(p, r) {
 
 function updatePlayer(dt) {
   if (!player.alive) return;
-  const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? BASE_SPEED * SPRINT_MULT : BASE_SPEED;
+  const crouching = !!(keys['ControlLeft'] || keys['ControlRight']);
+  let speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? BASE_SPEED * SPRINT_MULT : BASE_SPEED;
+  if (crouching) speed *= CROUCH_SPEED_MULT;   // crouched: no sprint bonus, deliberate pace
 
   let fx = 0, fz = 0;
   if (keys['KeyW']) fz += 1;
@@ -1015,16 +1200,26 @@ function updatePlayer(dt) {
   player.vel.y -= GRAVITY * dt;
 
   player.pos.addScaledVector(player.vel, dt);
+  // hard ground: eye can't sink below standing height (landing from a jump snaps here)
   if (player.pos.y < PLAYER_H) {
     player.pos.y = PLAYER_H;
     player.vel.y = 0;
     player.onGround = true;
   }
+  // crouch: while grounded, ease the eye between standing and crouched height (both directions)
+  if (player.onGround) {
+    const targetEye = crouching ? CROUCH_H : PLAYER_H;
+    if (Math.abs(player.pos.y - targetEye) > 0.002) {
+      player.pos.y += (targetEye - player.pos.y) * Math.min(1, 14 * dt);
+    } else {
+      player.pos.y = targetEye;
+    }
+  }
   collidePlayer(player.pos, 0.45);
 
   // headbob
   const hSpeed = Math.hypot(player.vel.x, player.vel.z);
-  const targetAmp = player.onGround ? Math.min(1, hSpeed / 6) * (keys['ShiftLeft'] ? 0.035 : 0.022) : 0;
+  const targetAmp = player.onGround ? Math.min(1, hSpeed / 6) * (keys['ShiftLeft'] ? 0.035 : 0.022) * (crouching ? 0.45 : 1) : 0;
   player.bobAmp += (targetAmp - player.bobAmp) * Math.min(1, 10 * dt);
   player.bobT += dt * (6 + hSpeed * 1.4);
   const bobY = Math.sin(player.bobT * 2) * player.bobAmp;
@@ -1053,9 +1248,10 @@ function updatePlayer(dt) {
                    -0.5 + k * 0.12);
   gun.rotation.x = k * 0.25 + rTilt;
   gun.rotation.z = rRoll;
-  // sniper scope: zoom FOV, hide viewmodel, show scope overlay
+  // aiming: sniper scope (full zoom + overlay) or iron sights (rifle/shotgun, slight zoom)
   const scoped = aiming && curWeapon === 'sniper';
-  const targetFov = scoped ? SCOPE_FOV : BASE_FOV;
+  const irons = aiming && !scoped;
+  const targetFov = scoped ? SCOPE_FOV : irons ? IRON_FOV : BASE_FOV;
   if (camera.fov !== targetFov) {
     camera.fov += (targetFov - camera.fov) * Math.min(1, 14 * dt);
     camera.updateProjectionMatrix();
@@ -1105,6 +1301,12 @@ bannerEl.id = 'banner';
 bannerEl.style.cssText = 'position:fixed;left:50%;top:32%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;font-size:44px;font-weight:800;letter-spacing:10px;color:#cfe6ff;text-shadow:0 0 30px rgba(80,160,255,.8);opacity:0;display:none';
 document.body.appendChild(bannerEl);
 
+// multi-kill banner (DOUBLE/TRIPLE/MULTI KILL) — created here so showKillBanner can reference it
+killBannerEl = document.getElementById('kill-banner') || (() => {
+  const d = document.createElement('div'); d.id = 'kill-banner'; d.style.display = 'none';
+  document.body.appendChild(d); return d;
+})();
+
 // ---------- game over ----------
 function showGameOver() {
   state = 'over';
@@ -1123,6 +1325,8 @@ function stepGame(now, fromRAF) {
   dt = Math.min(dt, 0.05);
 
   if (state === 'playing' || state === 'dying') {
+    // debug bullet time: world runs at 0.3x while the player keeps normal speed
+    const wdt = (dbg.active && dbg.slowmo) ? dt * 0.3 : dt;
     if (state === 'playing') {
       player.fireCd -= dt;
       if (mouseDown) tryShoot();
@@ -1131,7 +1335,7 @@ function stepGame(now, fromRAF) {
         if (player.reloadT <= 0) { player.reloading = false; player.ammo = WEAPONS[curWeapon].mag; }
       }
       updatePlayer(dt);
-      updateSpawner(dt);
+      updateSpawner(wdt);
       if (waveBanner > 0) {
         waveBanner -= dt;
         bannerEl.style.display = 'block';
@@ -1139,8 +1343,8 @@ function stepGame(now, fromRAF) {
         if (waveBanner <= 0) bannerEl.style.display = 'none';
       }
     }
-    updateEnemies(dt);
-    updateShots(dt);
+    updateEnemies(wdt);
+    updateShots(wdt);
 
     // death transition
     if (state === 'dying') {
@@ -1196,6 +1400,7 @@ function stepGame(now, fromRAF) {
  get curWeapon() { return curWeapon; },
  startGame, stepGame, spawnEnemy, damageEnemy, tryShoot, switchWeapon, quitToMenu, togglePause,
  weapons: WEAPONS,
+ dbg,
  pageErrors: window.__pageErrors,
  renderer, scene, camera
  };
@@ -1227,6 +1432,8 @@ if (location.hash === '#autotest') {
       enemies: enemies.length, hp: Math.round(player.hp),
       ammo: player.ammo, kills: kills, score: score, wave: wave,
       spawnQueue: spawnQueue,
+      shotKills: shotKills,
+      killBanner: killBannerEl ? (killBannerEl.textContent + ' ' + (killBannerEl.classList.contains('show') ? '(show)' : '')) : '',
       webgl: !!renderer.getContext(),
       pageErrors: window.__pageErrors
     }, extra || {});
