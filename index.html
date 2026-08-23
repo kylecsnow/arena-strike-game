@@ -119,6 +119,7 @@
     <div><b>SHIFT</b><br>sprint</div>
     <div><b>SPACE</b><br>jump</div>
     <div><b>R</b><br>reload</div>
+    <div><b>Q / E</b><br>lean</div>
     <div><b>TAB / 1·2·3</b><br>weapons</div>
     <div><b>ESC</b><br>pause</div>
   </div>
@@ -626,6 +627,8 @@ const player = {
   fireCd: 0,
   bobT: 0, bobAmp: 0,
   yaw: 0, pitch: 0,
+  lean: 0,          // eased lean amount, -1 (left/Q) .. +1 (right/E)
+  leanEff: 0,       // lean actually applied this frame (reduced near walls)
   hurtT: 0,
   alive: true,
 };
@@ -767,7 +770,7 @@ document.addEventListener('keydown', e => {
       if (e.code === 'Digit1') switchWeapon('rifle');
       if (e.code === 'Digit2') switchWeapon('shotgun');
       if (e.code === 'Digit3') switchWeapon('sniper');
-      if (e.code === 'KeyQ' || e.code === 'Digit4') {
+      if (e.code === 'KeyE' || e.code === 'Digit4') {
         const i = WEAPON_ORDER.indexOf(curWeapon);
         switchWeapon(WEAPON_ORDER[(i + 1) % WEAPON_ORDER.length]);
       }
@@ -1224,6 +1227,24 @@ function updatePlayer(dt) {
   }
   collidePlayer(player.pos, 0.45);
 
+  // lean: Q/E ease the eye sideways off the movement axis to peek around cover
+  let leanTarget = 0;
+  if (keys['KeyQ']) leanTarget -= 1;
+  if (keys['KeyE']) leanTarget += 1;
+  player.lean += (leanTarget - player.lean) * Math.min(1, 10 * dt);
+
+  // camera roll from lean, plus lateral offset along the player's right vector.
+  // The offset shrinks if a wall/cover is in the way (raycast from the body), so
+  // you can't push your head through geometry — you just stop leaning out further.
+  const LEAN_DIST = 0.55, LEAN_ROLL = 0.16;   // radians ≈ 9°
+  const rightV = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+  raycaster.set(new THREE.Vector3(player.pos.x, player.pos.y * 0.6, player.pos.z), rightV.clone().multiplyScalar(Math.sign(player.lean || 1)));
+  raycaster.far = LEAN_DIST + 0.45;
+  const leanHits = raycaster.intersectObjects(worldMeshes, false);
+  const wallFactor = leanHits.length ? Math.max(0, 1 - Math.max(0, leanHits[0].distance - 0.45) / LEAN_DIST) : 1;
+  player.leanEff = player.lean * wallFactor;
+  const leanOff = player.leanEff * LEAN_DIST;
+
   // headbob
   const hSpeed = Math.hypot(player.vel.x, player.vel.z);
   const targetAmp = player.onGround ? Math.min(1, hSpeed / 6) * (keys['ShiftLeft'] ? 0.035 : 0.022) * (crouching ? 0.45 : 1) : 0;
@@ -1234,6 +1255,11 @@ function updatePlayer(dt) {
 
   camera.position.copy(player.pos);
   camera.position.y += bobY;
+  camera.position.x += rightV.x * leanOff;
+  camera.position.z += rightV.z * leanOff;
+  camera.rotation.set(player.pitch, player.yaw, 0);
+  camera.rotateZ(-player.leanEff * LEAN_ROLL);
+
   // apply gun kick & bob to viewmodel (+ reload animation)
   gunKick = Math.max(0, gunKick - dt * 1.2);
   const k = Math.min(1, gunKick * 9);
@@ -1266,7 +1292,6 @@ function updatePlayer(dt) {
   gun.visible = !scoped;
   scopeOverlay.style.display = scoped ? 'block' : 'none';
   crosshairEl.style.display = scoped ? 'none' : 'block';
-  camera.rotation.set(player.pitch, player.yaw, 0);
 }
 
 // ---------- HUD ----------
