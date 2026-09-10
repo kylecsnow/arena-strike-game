@@ -28,7 +28,7 @@ Click **Enter the Arena** to start, then click the canvas to lock the mouse for 
 | Space | Jump |
 | R | Reload |
 | Q / E | Lean left / right (peek around cover) |
-| Tab / 1 / 2 / 3 | Switch weapons (Tab cycles rifle → shotgun → sniper) |
+| Tab / 1-5 | Switch weapons (Tab cycles rifle → shotgun → sniper → battleaxe → lightsaber) |
 | Esc | Pause |
 
 ## Gameplay
@@ -46,11 +46,17 @@ You spawn in a square arena and face waves of enemies that spawn from the edges.
 
 Tanks, skitters and weavers all become more common as the wave number climbs.
 
-Three weapons are available:
+Five weapons are available — three that fire, two that swing:
 
 - **Rifle** — automatic, 30-round magazine
 - **Shotgun** — 8 pellets per shot, 6-round magazine
 - **Sniper** — high damage, 5-round magazine, scope overlay
+- **Battleaxe** — 200 damage, cleaves everything in its sweep, but every swing is committed for 1.22s (0.55s wind-up before the blow lands, then recovery). Carrying it slows you to 0.82x speed. Slow, lumbering, and it kills anything it touches outright.
+- **Lightsaber** — 55 damage per swipe, a whole swing in 0.46s, wider sweep. Less damage than the axe and no cleave, but far less committed: it is the safer weapon to be caught holding.
+
+Melee weapons never run out of ammo and never need reloading, so they show **∞** on the HUD. Their cost is time — only the strike frame deals damage, so a swing started at the wrong moment is a wasted 1.22s with the axe.
+
+A single swing that kills two or more enemies still earns the multi-kill banner, which is where the axe pays off: line up a pack and one chop can clear it.
 
 Headshots deal extra damage. Your score tracks kills (with headshot multipliers), waves survived, and wave-clear bonuses. The run ends when your health reaches zero.
 
