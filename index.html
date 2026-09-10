@@ -98,6 +98,7 @@
   <div class="dbg-row"><span class="dbg-key">6</span> no spread/recoil <span class="dbg-val" id="dbg-v-acc">OFF</span></div>
   <div style="border-top:1px solid rgba(255,190,60,.25);margin:6px 0"></div>
   <div class="dbg-row"><span class="dbg-key">7</span> spawn bot &nbsp;·&nbsp; <span class="dbg-key">8</span> spawn tank</div>
+  <div class="dbg-row"><span class="dbg-key">F3</span> spawn skitter &nbsp;·&nbsp; <span class="dbg-key">F4</span> spawn weaver</div>
   <div class="dbg-row"><span class="dbg-key">9</span> skip wave &nbsp;·&nbsp; <span class="dbg-key">0</span> clear wave</div>
   <div style="border-top:1px solid rgba(255,190,60,.25);margin:6px 0"></div>
   <div class="dbg-row"><span class="dbg-key">F1</span> toggle this panel</div>
@@ -280,6 +281,36 @@ function sfx(type) {
         const og = a.createGain(); og.gain.setValueAtTime(0.15, t + i * 0.22); og.gain.exponentialRampToValueAtTime(0.001, t + i * 0.22 + 0.3);
         o.connect(og); og.connect(a.destination); o.start(t + i * 0.22); o.stop(t + i * 0.22 + 0.32);
       });
+    } else if (type === 'shriek') {
+      // skitter wind-up: rising insectile screech
+      const o = a.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(1500, t + 0.16); o.frequency.exponentialRampToValueAtTime(680, t + 0.34);
+      const og = a.createGain(); og.connect(a.destination);
+      og.gain.setValueAtTime(0.001, t); og.gain.exponentialRampToValueAtTime(0.2, t + 0.12); og.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+      o.connect(og); o.start(t); o.stop(t + 0.38);
+    } else if (type === 'thud') {
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.12);
+      const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 340;
+      s.connect(f); f.connect(g);
+      g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+      s.start(t);
+    } else if (type === 'lob') {
+      // weaver launches a mortar
+      const o = a.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(560, t + 0.22);
+      o.connect(g); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+      o.start(t); o.stop(t + 0.28);
+    } else if (type === 'boom') {
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.6);
+      const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(70, t + 0.55);
+      s.connect(f); f.connect(g);
+      g.gain.setValueAtTime(0.75, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      s.start(t);
+      const o = a.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+      const og = a.createGain(); og.connect(a.destination);
+      og.gain.setValueAtTime(0.4, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+      o.connect(og); o.start(t); o.stop(t + 0.58);
     }
   } catch (e) {}
 }
@@ -564,12 +595,19 @@ const botMat = new THREE.MeshStandardMaterial({ color: 0xc04a4a, roughness: 0.6,
 const tankMat = new THREE.MeshStandardMaterial({ color: 0x5a6a80, roughness: 0.55, metalness: 0.4 });
 const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffd24a });
 const eyeMatB = new THREE.MeshBasicMaterial({ color: 0x86e8ff });
+// skitter (leaping ambusher) + weaver (floating mortar platform)
+const skitMat = new THREE.MeshStandardMaterial({ color: 0x37234a, roughness: 0.55, metalness: 0.3 });
+const skitMat2 = new THREE.MeshStandardMaterial({ color: 0x6b2f9a, roughness: 0.45, metalness: 0.45 });
+const skitEyeMat = new THREE.MeshStandardMaterial({ color: 0xff5ad8, emissive: 0xff2ab0, emissiveIntensity: 1.6, roughness: 0.3 });
+const weavCoreMat = new THREE.MeshStandardMaterial({ color: 0x2a5f7a, emissive: 0x2ad8ff, emissiveIntensity: 1.3, roughness: 0.25, metalness: 0.5 });
+const weavRingMat = new THREE.MeshStandardMaterial({ color: 0x44586e, roughness: 0.35, metalness: 0.9 });
+const weavShardMat = new THREE.MeshStandardMaterial({ color: 0x8f5ad8, emissive: 0x5a2ad8, emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.6 });
 
 function makeEnemy(type) {
-  const isTank = type === 'tank';
-  const mat = isTank ? tankMat.clone() : botMat.clone();
   const g = new THREE.Group();
-  if (isTank) {
+  let noShadow = null;   // additive glow shells must not cast shadows
+  if (type === 'tank') {
+    const mat = tankMat.clone();
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.95, 1.7, 10), mat);
     torso.position.y = 0.95;
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.55, 0.7), mat);
@@ -578,7 +616,88 @@ function makeEnemy(type) {
     g.userData.headMesh = head; g.userData.headY = 1.95;
     g.userData.radius = 1.0; g.userData.h = 2.3;
     g.userData.hp = 90; g.userData.dmg = 6; g.userData.speed = 2.3; g.userData.fireInt = 1.5; g.userData.score = 30;
+    g.userData.eye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), eyeMatB);
+    g.userData.eye.position.set(0, 1.95, 0.37);
+  } else if (type === 'skitter') {
+    // --- SKITTER: low six-legged ambusher. No gun; it closes the gap and pounces. ---
+    const mat = skitMat.clone(), mat2 = skitMat2.clone(), eyeM = skitEyeMat.clone();
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), mat);
+    shell.scale.set(1.3, 0.5, 1.05); shell.position.y = 0.45;
+    const plate = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), mat2);
+    plate.scale.set(1.15, 0.62, 1.0); plate.position.set(0, 0.6, -0.2);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), mat2);
+    head.scale.set(1.15, 0.85, 1.25); head.position.set(0, 0.42, 0.46);
+    g.add(shell, plate, head);
+    for (const s of [-1, 1]) {   // mandibles
+      const mnd = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.3), mat2);
+      mnd.position.set(s * 0.13, 0.34, 0.66); mnd.rotation.y = -s * 0.4;
+      g.add(mnd);
+    }
+    const eyes = [];   // 4-eye cluster — flares as the pounce telegraph
+    for (const [ex, ey, es] of [[-0.12, 0.5, 0.058], [0.12, 0.5, 0.058], [-0.05, 0.42, 0.04], [0.05, 0.42, 0.04]]) {
+      const ey1 = new THREE.Mesh(new THREE.SphereGeometry(es, 8, 8), eyeM);
+      ey1.position.set(ex, ey, 0.6);
+      g.add(ey1); eyes.push(ey1);
+    }
+    const legs = [];   // six splayed legs
+    for (const s of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.07, 0.07), mat2);
+        leg.position.set(s * 0.6, 0.28, 0.3 - i * 0.34);
+        leg.rotation.z = -s * 0.38;
+        leg.userData.rz = leg.rotation.z;
+        const foot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), mat2);
+        foot.position.set(s * 0.9, 0.12, leg.position.z);
+        g.add(leg, foot); legs.push(leg);
+      }
+    }
+    g.userData.shell = shell; g.userData.headMesh = head; g.userData.headY = 0.55;
+    g.userData.legs = legs; g.userData.eyes = eyes; g.userData.eyeM = eyeM;
+    g.userData.radius = 0.55; g.userData.h = 1.0;
+    g.userData.hp = 26; g.userData.dmg = 22; g.userData.speed = 6.4; g.userData.score = 25;
+    g.userData.ai = 'skitter';
+    g.userData.st = 'stalk'; g.userData.stT = 0;
+    g.userData.leapCd = 1.2 + Math.random() * 1.6;
+    g.userData.vel = new THREE.Vector3();
+    g.userData.bit = false;
+    g.userData.baseEmissive = 0x000000;
+    g.userData.fx = 0x9a5ad8; g.userData.fxY = 0.5;
+  } else if (type === 'weaver') {
+    // --- WEAVER: hovering mortar platform. Arcs AoE plasma shells over cover. ---
+    const coreM = weavCoreMat.clone(), ringM = weavRingMat.clone(), shardM = weavShardMat.clone();
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.48, 14, 12), coreM);
+    const glowShell = new THREE.Mesh(new THREE.SphereGeometry(0.62, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0x2ad8ff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false }));
+    // deliberately low segment counts so the spin is readable (a smooth torus would look static)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.075, 6, 6), ringM);
+    ring.rotation.x = -Math.PI / 2;
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.055, 5, 8), shardM);
+    ring2.rotation.x = -Math.PI / 2; ring2.rotation.z = 0.7;
+    const pod = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 10), ringM);
+    pod.position.y = -0.62; pod.rotation.x = Math.PI;
+    g.add(core, glowShell, ring, ring2, pod);
+    const shards = [];
+    for (let i = 0; i < 4; i++) {
+      const sh = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), shardM);
+      sh.raycast = function () {};
+      g.add(sh); shards.push(sh);
+    }
+    // rings, shards and glow are decoration only — they must not stop bullets,
+    // or the edge-on rings would swallow every ray aimed at the core and the
+    // weaver could never take a headshot. Hitbox = core (head) + launch pod.
+    for (const deco of [glowShell, ring, ring2]) deco.raycast = function () {};
+    noShadow = [glowShell];
+    g.userData.ring = ring; g.userData.ring2 = ring2; g.userData.shards = shards;
+    g.userData.headMesh = core; g.userData.headY = 3.05;
+    g.userData.radius = 0.9; g.userData.h = 2.0;
+    g.userData.hp = 46; g.userData.dmg = 26; g.userData.speed = 3.1; g.userData.fireInt = 3.6; g.userData.score = 40;
+    g.userData.ai = 'weaver';
+    g.userData.hoverY = 3.05; g.userData.spawnY = 8;   // flies in from above
+    g.userData.charging = 0;
+    g.userData.baseEmissive = 0x2ad8ff;
+    g.userData.fx = 0x2ad8ff; g.userData.fxY = 3.0;
   } else {
+    const mat = botMat.clone();
     const torso = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), mat);
     torso.scale.y = 1.5;
     torso.position.y = 0.85;
@@ -588,17 +707,33 @@ function makeEnemy(type) {
     g.userData.headMesh = head; g.userData.headY = 1.5;
     g.userData.radius = 0.5; g.userData.h = 1.9;
     g.userData.hp = 30; g.userData.dmg = 10; g.userData.speed = 3.6 + Math.random() * 1.2; g.userData.fireInt = 0.9 + Math.random() * 0.4; g.userData.score = 15;
+    g.userData.eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat);
+    g.userData.eye.position.set(0, 1.5, 0.24);
+    g.userData.baseEmissive = 0x000000;
+    g.userData.fx = 0xc04a4a; g.userData.fxY = 1.2;
   }
-  g.userData.eye = new THREE.Mesh(new THREE.SphereGeometry(isTank ? 0.16 : 0.08, 8, 8), isTank ? eyeMatB : eyeMat);
-  g.userData.eye.position.set(0, isTank ? 1.95 : 1.5, isTank ? 0.37 : 0.24);
-  g.add(g.userData.eye);
+  if (g.userData.eye) g.add(g.userData.eye);
   g.traverse(o => { o.castShadow = true; });
+  if (noShadow) for (const m of noShadow) m.castShadow = false;
   g.userData.type = type;
   g.userData.fireCd = 1 + Math.random() * 2;
   g.userData.hurtT = 0;
   g.userData.dead = false; g.userData.deathT = 0;
   g.userData.seed = Math.random() * 100;
   return g;
+}
+
+// Which hostile to send next. Bots are the baseline; tanks are the slow bruisers;
+// skitters join from wave 2 and weavers from wave 4, both ramping up with the wave.
+function pickEnemyType() {
+  const tankChance = Math.min(0.30, 0.04 + wave * 0.025);
+  const skitChance = wave >= 2 ? Math.min(0.28, 0.10 + (wave - 2) * 0.03) : 0;
+  const weavChance = wave >= 4 ? Math.min(0.22, 0.08 + (wave - 4) * 0.02) : 0;
+  const r = Math.random();
+  if (r < weavChance) return 'weaver';
+  if (r < weavChance + skitChance) return 'skitter';
+  if (r < weavChance + skitChance + tankChance) return 'tank';
+  return 'bot';
 }
 
 function spawnEnemy(type) {
@@ -614,7 +749,7 @@ function spawnEnemy(type) {
     else { z = off; x = (Math.random() * 2 - 1) * ARENA_HALF * 0.8; }
     tries++;
   } while (player.pos.distanceTo(new THREE.Vector3(x, 0, z)) < 18 && tries < 20);
-  e.position.set(x, 0, z);
+  e.position.set(x, e.userData.spawnY || 0, z);
   scene.add(e);
   enemies.push(e);
 }
@@ -721,6 +856,11 @@ function setWave(n) {
 function resetGame() {
   for (let i = enemies.length - 1; i >= 0; i--) { scene.remove(enemies[i]); }
   enemies.length = 0;
+  for (const s of shots) { scene.remove(s.mesh); if (s.marker) s.marker.visible = false; }
+  shots.length = 0;
+  for (const b of blasts) { scene.remove(b.mesh); scene.remove(b.light); }
+  blasts.length = 0;
+  for (const m of blastMarks) m.visible = false;
   player.pos.set(0, PLAYER_H, 12);
   player.vel.set(0, 0, 0);
   player.hp = player.maxHp;
@@ -750,6 +890,8 @@ document.addEventListener('keydown', e => {
   if (dbg.active) {
     if (e.code === 'F1') { e.preventDefault(); dbgPanel.style.display = dbgPanel.style.display === 'none' ? 'block' : 'none'; }
     else if (e.code === 'F2') exitDebugMode();
+    else if (e.code === 'F3') { e.preventDefault(); if (state === 'playing') spawnEnemy('skitter'); }
+    else if (e.code === 'F4') { e.preventDefault(); if (state === 'playing') spawnEnemy('weaver'); }
     else if (state === 'playing') {
       const t = k => { dbg[k] = !dbg[k]; dbgRefresh(); };
       if (e.code === 'Digit1' && !e.repeat) t('god');
@@ -843,8 +985,11 @@ function quitToMenu() {
   dbgHideChrome();
   for (let i = enemies.length - 1; i >= 0; i--) scene.remove(enemies[i]);
   enemies.length = 0;
-  for (const s of shots) scene.remove(s.mesh);
+  for (const s of shots) { scene.remove(s.mesh); if (s.marker) s.marker.visible = false; }
   shots.length = 0;
+  for (const b of blasts) { scene.remove(b.mesh); scene.remove(b.light); }
+  blasts.length = 0;
+  for (const m of blastMarks) m.visible = false;
   for (const t of tracerPool) t.visible = false;
   for (const s of sparkPool) s.visible = false;
   player.reloading = false; player.reloadT = 0;
@@ -997,6 +1142,7 @@ function damageEnemy(e, dmg, point, headshot) {
   if (e.userData.hp <= 0) {
     e.userData.dead = true;
     e.userData.deathT = 0;
+    fireSparks(e.position.clone().setY(e.userData.fxY || 0.9), 12, e.userData.fx || 0xff5533);
     kills++;
     shotKills++;
     score += e.userData.score * (headshot ? 2 : 1);
@@ -1029,10 +1175,15 @@ function updateEnemies(dt) {
     if (dbg.active && dbg.freeze) {   // debug: statues — no movement, no shooting
       if (ud.hurtT > 0) {
         ud.hurtT -= dt;
-        if (ud.hurtT <= 0) e.children[0].material.emissive.setHex(0x000000);
+        if (ud.hurtT <= 0) e.children[0].material.emissive.setHex(ud.baseEmissive || 0x000000);
       }
       continue;
     }
+
+    // The new AI types run their own movement + attack logic; bot/tank fall through
+    // to the original shared behaviour below.
+    if (ud.ai === 'skitter') { updateSkitter(e, ud, dt, dist); enemySharedPost(e, ud, dt); continue; }
+    if (ud.ai === 'weaver') { updateWeaver(e, ud, dt, dist); enemySharedPost(e, ud, dt); continue; }
 
     // movement: keep 8-16 m range, strafe orbit
     const want = ud.type === 'tank' ? 11 : 14;
@@ -1066,7 +1217,7 @@ function updateEnemies(dt) {
     // hurt flash decay
     if (ud.hurtT > 0) {
       ud.hurtT -= dt;
-      if (ud.hurtT <= 0) e.children[0].material.emissive.setHex(0x000000);
+      if (ud.hurtT <= 0) e.children[0].material.emissive.setHex(ud.baseEmissive || 0x000000);
     }
 
     // attack
@@ -1092,6 +1243,263 @@ function clampToArena(e, r) {
       if (px < pz) e.position.x += (e.position.x > (c.min.x + c.max.x) / 2 ? px : -px);
       else e.position.z += (e.position.z > (c.min.z + c.max.z) / 2 ? pz : -pz);
     }
+  }
+}
+
+// ---------- enemy AI: SKITTER (leaping ambusher) ----------
+// A low, six-legged horror that refuses to trade shots: it sprints in, telegraphs
+// the pounce by flaring its eye cluster, then launches a ballistic leap that hurts
+// on contact. Almost no armour — drop it before it lands, or get out of the way.
+const SKITTER_GRAV = 20;
+const _sk1 = new THREE.Vector3(), _sk2 = new THREE.Vector3(), _sk3 = new THREE.Vector3();
+
+// Cheap obstacle probe + wall-slide steering. These two types have to cross the
+// whole arena to reach the player, so a plain seek (fine for the bots, which only
+// orbit at 8-16 m) leaves them jammed against a crate. Try the wanted heading
+// first, then progressively wider detours, and take the first clear one.
+const _steerA = [0, 0.55, -0.55, 1.1, -1.1, 1.7, -1.7, 2.4, -2.4];
+function pointBlocked(x, z, r, y) {
+  for (const c of colliders) {
+    if (y > c.max.y - 0.5) continue;                  // flying over it
+    if (x + r > c.min.x && x - r < c.max.x && z + r > c.min.z && z - r < c.max.z) return true;
+  }
+  return false;
+}
+function steerAround(e, dx, dz, speed, dt, r) {
+  const probe = 1.1;
+  for (const a of _steerA) {
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const nx = dx * ca - dz * sa, nz = dx * sa + dz * ca;
+    if (!pointBlocked(e.position.x + nx * probe, e.position.z + nz * probe, r, e.position.y)) {
+      e.position.x += nx * speed * dt;
+      e.position.z += nz * speed * dt;
+      return;
+    }
+  }
+}
+
+function updateSkitter(e, ud, dt, dist) {
+  const t = performance.now() * 0.001;
+  ud.stT -= dt;                                   // drives wind / recover timers
+  const gait = ud.st === 'wind' ? 26 : 14;
+  for (let i = 0; i < ud.legs.length; i++) {
+    const L = ud.legs[i];
+    L.rotation.y = Math.sin(t * gait + i * 1.7 + ud.seed) * 0.55;
+    L.rotation.z = L.userData.rz - Math.abs(Math.sin(t * gait * 0.9 + i)) * 0.18;
+  }
+
+  if (ud.st === 'leap') {
+    e.position.addScaledVector(ud.vel, dt);
+    ud.vel.y -= SKITTER_GRAV * dt;
+    for (const L of ud.legs) { L.rotation.y = 0; L.rotation.z = L.userData.rz - 0.55; }   // legs tuck
+    ud.shell.rotation.x = -0.4;                                                          // nose down
+    if (!ud.bit && player.alive) {
+      _sk1.copy(player.pos).sub(e.position);
+      if (_sk1.length() < 1.3) { ud.bit = true; damagePlayer(ud.dmg); sfx('hurt'); }
+    }
+    if (e.position.y <= 0) {                       // touchdown
+      e.position.y = 0;
+      ud.vel.set(0, 0, 0);
+      ud.shell.rotation.x = 0;
+      ud.st = 'recover'; ud.stT = 0.45;
+      fireSparks(e.position.clone().setY(0.2), 6, 0x9a5ad8);
+      sfx('thud');
+    }
+    return;
+  }
+
+  if (ud.st === 'wind') {                          // telegraph: hunker + eyes flare
+    ud.shell.position.y += (0.3 - ud.shell.position.y) * Math.min(1, 12 * dt);
+    const u = 1 - Math.max(0, ud.stT) / 0.5;
+    for (const ey of ud.eyes) ey.scale.setScalar(1 + u * 0.55);
+    ud.eyeM.emissiveIntensity = 1.6 + u * 3.6;
+    if (ud.stT <= 0) {
+      _sk1.copy(player.pos); _sk1.y = e.position.y; _sk1.sub(e.position);
+      const d = Math.max(0.001, Math.hypot(_sk1.x, _sk1.z));
+      const tof = Math.max(0.36, Math.min(0.92, d / 17));
+      _sk1.normalize();
+      ud.vel.set(_sk1.x * d / tof, (1.2 + 0.5 * SKITTER_GRAV * tof * tof) / tof, _sk1.z * d / tof);
+      ud.bit = false;
+      ud.st = 'leap';
+      ud.shell.position.y = 0.45;
+      sfx('shriek');
+    }
+    return;
+  }
+
+  if (ud.st === 'recover') {
+    ud.shell.position.y += (0.45 - ud.shell.position.y) * Math.min(1, 8 * dt);
+    for (const ey of ud.eyes) ey.scale.setScalar(1);
+    ud.eyeM.emissiveIntensity = 1.6;
+    if (ud.stT <= 0) { ud.st = 'stalk'; ud.leapCd = 2.2 + Math.random() * 1.8; }
+    return;
+  }
+
+  // stalk: close the gap, then harry from an erratic orbit
+  _sk1.copy(player.pos).sub(e.position); _sk1.y = 0;
+  _sk2.copy(_sk1).normalize();
+  _sk3.set(0, 0, 0);
+  if (dist > 10) _sk3.add(_sk2);
+  else if (dist < 6) _sk3.sub(_sk2);
+  _sk3.addScaledVector(_sk1.set(-_sk2.z, 0, _sk2.x), Math.sin(t * 2.6 + ud.seed) * 0.9);
+  if (_sk3.lengthSq() > 0.001) {
+    _sk3.normalize();
+    steerAround(e, _sk3.x, _sk3.z, ud.speed, dt, ud.radius);
+  }
+
+  ud.leapCd -= dt;
+  if (ud.leapCd <= 0 && player.alive && dist < 18 && dist > 3) { ud.st = 'wind'; ud.stT = 0.5; }
+}
+
+// ---------- enemy AI: WEAVER (floating mortar platform) ----------
+// Hovers above the crates on a lazy figure-eight, spinning its rings, and lobs
+// arcing plasma shells that detonate on impact. A pink ground marker shows the
+// impact point while the shell is airborne — keep moving and it lands behind you.
+const _wv1 = new THREE.Vector3(), _wv2 = new THREE.Vector3(), _wv3 = new THREE.Vector3();
+
+function updateWeaver(e, ud, dt, dist) {
+  const t = performance.now() * 0.001;
+  const hy = ud.hoverY + Math.sin(t * 1.1 + ud.seed) * 0.22;
+  e.position.y += (hy - e.position.y) * Math.min(1, 2.2 * dt);
+
+  _wv1.copy(player.pos).sub(e.position); _wv1.y = 0;
+  _wv2.copy(_wv1).normalize();
+  _wv3.set(0, 0, 0);
+  if (dist > 19) _wv3.add(_wv2);
+  else if (dist < 12) _wv3.sub(_wv2);
+  _wv3.x += -_wv2.z * Math.sin(t * 0.62 + ud.seed) * 1.3;      // weave sideways…
+  _wv3.z += _wv2.x * Math.sin(t * 0.62 + ud.seed) * 1.3;
+  _wv3.addScaledVector(_wv2, Math.sin(t * 0.95 + ud.seed * 2.1) * 0.55);   // …and in/out
+  if (_wv3.lengthSq() > 0.001) {
+    _wv3.normalize();
+    steerAround(e, _wv3.x, _wv3.z, ud.speed, dt, ud.radius);
+  }
+
+  // gyroscopic wobble + orbiting shards
+  ud.ring.rotation.x = -Math.PI / 2 + Math.sin(t * 1.5 + ud.seed) * 0.45;
+  ud.ring.rotation.z = t * 1.1;
+  ud.ring2.rotation.x = -Math.PI / 2 + Math.sin(t * 1.9 + ud.seed + 1.2) * 0.6;
+  ud.ring2.rotation.z = 0.7 - t * 1.6;
+  for (let i = 0; i < ud.shards.length; i++) {
+    const a = t * 1.5 + i * Math.PI / 2 + ud.seed;
+    ud.shards[i].position.set(Math.cos(a) * 0.95, Math.sin(a * 1.7) * 0.3, Math.sin(a) * 0.95);
+    ud.shards[i].rotation.x += dt * 3.5;
+    ud.shards[i].rotation.y += dt * 2.2;
+  }
+
+  // core pulse — flares while charging a shell
+  const charging = ud.charging > 0;
+  e.children[0].material.emissiveIntensity = charging
+    ? 1.4 + (1 - Math.max(0, ud.charging) / 0.5) * 3.2
+    : 1.15 + Math.sin(t * 3.2 + ud.seed) * 0.25;
+
+  if (charging) {
+    ud.charging -= dt;
+    if (ud.charging <= 0 && player.alive) mortarFire(e);
+    return;
+  }
+  ud.fireCd -= dt;
+  if (ud.fireCd <= 0 && dist < 38 && player.alive) {
+    ud.charging = 0.5;                            // telegraph, then lob
+    ud.fireCd = ud.fireInt * (0.85 + Math.random() * 0.4);
+  }
+}
+
+// ---------- weaver mortar: arcing shell + telegraphed impact marker ----------
+let mortarsFired = 0, mortarsDetonated = 0;
+const MORTAR_G = 18;
+const mortarGeo = new THREE.SphereGeometry(0.3, 10, 8);
+const mortarMat = new THREE.MeshStandardMaterial({ color: 0x8ff2ff, emissive: 0x2ad8ff, emissiveIntensity: 1.9, roughness: 0.3, metalness: 0.2 });
+const blastMarks = [];
+{
+  for (let i = 0; i < 6; i++) {
+    const grp = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.1, 28),
+      new THREE.MeshBasicMaterial({ color: 0xff5ad8, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.88, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff2ab0, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    disc.rotation.x = -Math.PI / 2;
+    grp.add(ring, disc);
+    grp.userData.ring = ring; grp.userData.disc = disc;
+    grp.visible = false;
+    scene.add(grp); blastMarks.push(grp);
+  }
+}
+const blasts = [];
+function takeBlastMark() { for (const m of blastMarks) if (!m.visible) return m; return null; }
+
+function mortarFire(e) {
+  const from = e.position.clone(); from.y -= 0.5;      // drops out of the launch pod
+  const to = player.pos.clone();
+  to.y = 0.1;
+  to.x += (Math.random() - 0.5) * 1.8;                 // loose: area denial, not a sniper
+  to.z += (Math.random() - 0.5) * 1.8;
+  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+  const hd = Math.max(0.01, Math.hypot(dx, dz));
+  const tof = Math.max(0.5, hd / 13);                  // exact ballistic arc onto the target point
+  const vel = new THREE.Vector3(dx / tof, (dy + 0.5 * MORTAR_G * tof * tof) / tof, dz / tof);
+  const m = new THREE.Mesh(mortarGeo, mortarMat.clone());
+  m.position.copy(from);
+  m.add(new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff5ad8, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })));
+  scene.add(m);
+  const mk = takeBlastMark();
+  if (mk) { mk.visible = true; mk.position.set(to.x, 0.06, to.z); mk.scale.setScalar(1); }
+  shots.push({ mesh: m, vel: vel, life: tof + 3, dmg: e.userData.dmg, kind: 'mortar', t0: tof, fuse: tof, radius: 3.6, marker: mk });
+  mortarsFired++;
+  sfx('lob');
+}
+
+function detonateMortar(pos, radius, dmg, marker) {
+  if (marker) marker.visible = false;
+  sfx('boom');
+  fireSparks(pos, 14, 0x8ff2ff);
+  fireSparks(pos, 8, 0xff5ad8);
+  const at = pos.clone(); at.y = Math.max(0.5, at.y);
+  const bl = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.5, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xbdf6ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+  bl.position.copy(at);
+  const l = new THREE.PointLight(0x8ff2ff, 9, 18);
+  l.position.copy(at);
+  scene.add(bl); scene.add(l);
+  blasts.push({ mesh: bl, light: l, t: 0, dur: 0.45 });
+  mortarsDetonated++;
+  if (player.alive) {   // area damage, softer at the rim
+    const d = _wv1.copy(player.pos).sub(pos).length();
+    if (d < radius) damagePlayer(dmg * (0.45 + 0.55 * (1 - d / radius)));
+  }
+}
+
+function updateBlasts(dt) {
+  for (let i = blasts.length - 1; i >= 0; i--) {
+    const b = blasts[i];
+    b.t += dt;
+    const u = Math.min(1, b.t / b.dur);
+    b.mesh.scale.setScalar(0.5 + u * 2.2);
+    b.mesh.material.opacity = 0.5 * (1 - u);
+    b.light.intensity = 9 * (1 - u) * (1 - u);
+    if (u >= 1) {
+      scene.remove(b.mesh); scene.remove(b.light);
+      b.mesh.material.dispose(); b.mesh.geometry.dispose();
+      blasts.splice(i, 1);
+    }
+  }
+}
+
+// shared per-frame tail for the new AI types (separation, arena clamp, hurt decay)
+function enemySharedPost(e, ud, dt) {
+  for (const o of enemies) {
+    if (o === e || o.userData.dead) continue;
+    _sk3.copy(e.position).sub(o.position); _sk3.y = 0;
+    const d = _sk3.length();
+    const minD = (ud.radius + o.userData.radius) * 1.4;
+    if (d < minD && d > 0.001) e.position.add(_sk3.multiplyScalar((minD - d) / d * 0.5));
+  }
+  clampToArena(e, ud.radius);
+  if (ud.hurtT > 0) {
+    ud.hurtT -= dt;
+    if (ud.hurtT <= 0) e.children[0].material.emissive.setHex(ud.baseEmissive || 0x000000);
   }
 }
 
@@ -1123,6 +1531,36 @@ function updateShots(dt) {
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
     s.life -= dt;
+    if (s.kind === 'mortar') {
+      // arcing plasma shell: gravity + detonation on ground / cover / proximity
+      s.vel.y -= MORTAR_G * dt;
+      s.mesh.position.addScaledVector(s.vel, dt);
+      s.mesh.rotation.x += dt * 5; s.mesh.rotation.y += dt * 3;
+      const mp = s.mesh.position;
+      if (s.marker) {   // marker shrinks as the shell closes in
+        const u = Math.min(1, Math.max(0, 1 - s.fuse / s.t0));
+        s.marker.scale.setScalar(1 - u * 0.55);
+        s.marker.userData.ring.material.opacity = 0.4 + 0.35 * Math.abs(Math.sin(performance.now() * 0.006));
+        s.marker.userData.disc.material.opacity = 0.08 + 0.14 * (1 - u);
+      }
+      s.fuse -= dt;
+      let boom = s.life <= 0 || mp.y <= 0.12;
+      if (!boom) {
+        for (const c of colliders) {
+          if (mp.x > c.min.x && mp.x < c.max.x && mp.y > c.min.y && mp.y < c.max.y && mp.z > c.min.z && mp.z < c.max.z) { boom = true; break; }
+        }
+      }
+      if (!boom && player.alive) {
+        _tmpV.copy(mp).sub(player.pos);
+        if (_tmpV.length() < 0.8) boom = true;
+      }
+      if (boom) {
+        detonateMortar(mp.clone(), s.radius, s.dmg, s.marker);
+        scene.remove(s.mesh);
+        shots.splice(i, 1);
+      }
+      continue;
+    }
     s.mesh.position.addScaledVector(s.vel, dt);
     const p = s.mesh.position;
     let dead = s.life <= 0 || p.y < 0.05;
@@ -1312,8 +1750,7 @@ function updateSpawner(dt) {
     spawnT -= dt;
     if (spawnT <= 0) {
       spawnT = Math.max(0.35, 1.1 - wave * 0.04);
-      const tankChance = Math.min(0.35, 0.05 + wave * 0.03);
-      spawnEnemy(Math.random() < tankChance ? 'tank' : 'bot');
+      spawnEnemy(pickEnemyType());
       spawnQueue--;
     }
   } else if (enemies.length === 0 && state === 'playing') {
@@ -1378,6 +1815,7 @@ function stepGame(now, fromRAF) {
     }
     updateEnemies(wdt);
     updateShots(wdt);
+    updateBlasts(wdt);
 
     // death transition
     if (state === 'dying') {
@@ -1432,6 +1870,7 @@ function stepGame(now, fromRAF) {
  get spawnQueue() { return spawnQueue; },
  get curWeapon() { return curWeapon; },
  startGame, stepGame, spawnEnemy, damageEnemy, tryShoot, switchWeapon, quitToMenu, togglePause,
+pickEnemyType, mortarFire, detonateMortar, blastMarks, blasts,
  weapons: WEAPONS,
  dbg,
  pageErrors: window.__pageErrors,
@@ -1517,11 +1956,51 @@ if (location.hash === '#autotest') {
       targetKilled = e.userData.dead;
       los = targetKilled ? 'killed' : ('hp_left=' + Math.round(e.userData.hp));
     }
+    // --- new enemy types: spawn each, drive the sim, record what they actually do ---
+    const newEv = {};
+    try {
+      const hpStart = 1e9;
+      player.hp = hpStart;                       // stay alive so the sim keeps running
+      for (const tp of ['skitter', 'weaver']) {
+        spawnEnemy(tp);
+        const e = enemies[enemies.length - 1];
+        e.position.set(-8, e.userData.spawnY || 0, -22);   // open ground, far from cover
+        const x0 = e.position.x, z0 = e.position.z;
+        const seen = { leapt: false, woundUp: false, charged: false };
+        let closest = 1e9, threw2 = null;
+        for (let i = 0; i < 900; i++) {
+          t += 1000 / 60;
+          try { stepGame(t); } catch (err) { threw2 = err.message; break; }
+          if (e.userData.st === 'leap') seen.leapt = true;
+          if (e.userData.st === 'wind') seen.woundUp = true;
+          if (e.userData.charging > 0) seen.charged = true;
+          closest = Math.min(closest, e.position.distanceTo(player.pos));
+        }
+        newEv[tp] = {
+          state: e.userData.st || 'n/a',
+          moved: +Math.hypot(e.position.x - x0, e.position.z - z0).toFixed(2),
+          closest: +closest.toFixed(2),
+          y: +e.position.y.toFixed(2),
+          hp: Math.round(e.userData.hp),
+          alive: !e.userData.dead,
+          events: seen,
+          threw: threw2
+        };
+      }
+      newEv.playerDamage = Math.round(hpStart - player.hp);
+      newEv.mortars = { fired: mortarsFired, detonated: mortarsDetonated };
+      newEv.markersLeftVisible = blastMarks.filter(m => m.visible).length;
+      newEv.blastsActive = blasts.length;
+      newEv.enemiesAlive = enemies.filter(e => !e.userData.dead).length;
+      newEv.pageErrs = window.__pageErrors.length;
+      player.hp = 100; player.alive = true;
+    } catch (err) { newEv.error = String(err && err.message); }
     report('final', {
       stepped: ok, simThrew: threw, shotsFired: shotsFired,
       targetKilled: targetKilled, los: los,
       kills: kills, liveEnemies: enemies.filter(e => !e.userData.dead).length,
-      wave: wave, hp: Math.round(player.hp)
+      wave: wave, hp: Math.round(player.hp),
+      newEnemies: newEv
     });
   } catch (err) {
     const d = document.createElement('div'); d.id = 'autotest-result';

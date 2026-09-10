@@ -33,7 +33,18 @@ Click **Enter the Arena** to start, then click the canvas to lock the mouse for 
 
 ## Gameplay
 
-You spawn in a square arena and face waves of enemies that spawn from the edges. Each wave adds more hostiles; later waves introduce tougher **tank** units alongside faster **bot** enemies. Clear a wave to earn a score bonus and partial health recovery, then the next wave begins.
+You spawn in a square arena and face waves of enemies that spawn from the edges. Each wave adds more hostiles, and the mix shifts as you survive. Clear a wave to earn a score bonus and partial health recovery, then the next wave begins.
+
+## Hostiles
+
+| Enemy | From | Behaviour |
+|-------|------|-----------|
+| **Bot** | wave 1 | Fast, fragile, keeps its distance and fires inaccurate plasma bolts. |
+| **Tank** | wave 1 | Slow, heavily armoured, closes to ~11 m and hits hard. |
+| **Skitter** | wave 2 | Six-legged ambusher with almost no armour. It sprints in, flares its eye cluster as a tell, then launches a ballistic pounce that hurts on contact. Dodge the landing or drop it mid-air — it telegraphs for half a second before it jumps. |
+| **Weaver** | wave 4 | Floating mortar platform. Hovers above the crates on a figure-eight, then lobs arcing plasma shells that detonate for area damage. A pink ground marker shows the impact point while the shell is airborne, so keep moving and it lands behind you. Its core is the headshot; the spinning rings are just decoration and don't stop bullets. |
+
+Tanks, skitters and weavers all become more common as the wave number climbs.
 
 Three weapons are available:
 
@@ -56,6 +67,7 @@ The main menu has a **DEBUG MODE** button: a sandbox run with hotkey toggles for
 | 5 | Freeze enemies in place |
 | 6 | No spread / recoil / kick |
 | 7 / 8 | Spawn a bot / tank |
+| F3 / F4 | Spawn a skitter / weaver |
 | 9 / 0 | Skip to next wave / clear the current wave |
 | F1 | Show/hide the debug panel |
 | F2 | Exit debug mode back to the main menu |
