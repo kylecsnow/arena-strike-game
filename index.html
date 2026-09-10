@@ -74,7 +74,7 @@
     <div><b>R</b><br>reload</div>
     <div><b>G</b><br>throw frag</div>
     <div><b>Q / E</b><br>lean</div>
-    <div><b>TAB / 1-6</b><br>weapons</div>
+    <div><b>WHEEL · TAB<br>or 1-6</b><br>weapons</div>
     <div><b>ESC</b><br>pause</div>
   </div>
   <div class="keys">
@@ -128,7 +128,7 @@
     <div><b>R</b><br>reload</div>
     <div><b>G</b><br>throw frag</div>
     <div><b>Q / E</b><br>lean</div>
-    <div><b>TAB / 1-6</b><br>weapons</div>
+    <div><b>WHEEL · TAB<br>or 1-6</b><br>weapons</div>
     <div><b>ESC</b><br>pause</div>
   </div>
   <div style="display:flex;gap:18px;margin-top:26px">
@@ -931,11 +931,16 @@ function makeEnemy(type) {
     g.userData.radius = 0.9; g.userData.h = 2.0;
     // The toughest thing in the arena: it is a small, moving, hovering core that is
     // awkward to hit, so it needs real durability to survive incoming fire.
-    g.userData.hp = 120; g.userData.dmg = 30; g.userData.speed = 3.5; g.userData.fireInt = 2.75; g.userData.score = 60;
+    // Deliberately the biggest health pool in the game. It is a small, hovering,
+    // juking core, and its core counts as a headshot, so its HP has to absorb
+    // punishing single hits: 500 is 3 sniper core hits, 6 sniper body shots,
+    // 30 rifle rounds or 3 axe chops. It should never be a one-shot kill.
+    g.userData.hp = 500; g.userData.dmg = 30; g.userData.speed = 3.5; g.userData.fireInt = 2.75; g.userData.score = 120;
     g.userData.ai = 'weaver';
     g.userData.hoverY = 3.05; g.userData.spawnY = 8;   // flies in from above
     g.userData.charging = 0;
     g.userData.evadeT = 0;                            // darts sideways when hit
+    g.userData.evadeCd = 0;                           // and then cannot dart again for a moment
     g.userData.evadeDir = new THREE.Vector3();
     g.userData.baseEmissive = 0x2ad8ff;
     g.userData.fx = 0x2ad8ff; g.userData.fxY = 3.0;
@@ -1179,6 +1184,20 @@ document.addEventListener('keydown', e => {
   if (e.code === 'Escape' && (state === 'playing' || state === 'paused')) togglePause();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Mouse wheel also cycles weapons, in both directions. The digit keys remain the
+// direct-select method — players differ on this, so both are always live.
+let wheelLockT = 0;
+window.addEventListener('wheel', e => {
+  if (state !== 'playing') return;
+  e.preventDefault();
+  const now = performance.now();
+  if (now - wheelLockT < 90) return;          // one weapon per notch of a spin
+  wheelLockT = now;
+  const i = WEAPON_ORDER.indexOf(curWeapon);
+  const dir = e.deltaY > 0 ? 1 : -1;
+  switchWeapon(WEAPON_ORDER[(i + dir + WEAPON_ORDER.length) % WEAPON_ORDER.length]);
+}, { passive: false });
 document.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouseDown = false; aiming = false; });
 
 let mouseDown = false;
@@ -1588,11 +1607,15 @@ function damageEnemy(e, dmg, point, headshot) {
   // knockback
   const kb = new THREE.Vector3().subVectors(e.position, player.pos).setY(0).normalize().multiplyScalar(0.35);
   e.position.add(kb);
-  // Weavers are hard to finish: every hit makes one dart sideways (mostly across the
+  // Weavers are hard to finish: a hit makes it dart sideways (mostly across the
   // player's view rather than straight away), so sustained fire has to track it.
-  if (isLiveWeaver(e)) {
+  // Gated by a cooldown, otherwise a 500 HP weaver under fire would dart 4m for every
+  // bullet you land and never be killable — the cooldown turns that into a rhythm of
+  // dart, track, dart again that the player can actually work with.
+  if (isLiveWeaver(e) && e.userData.evadeCd <= 0) {
     e.userData.evadeDir.set(-kb.z, 0, kb.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1).addScaledVector(kb, 0.6).normalize();
     e.userData.evadeT = 0.6;
+    e.userData.evadeCd = 1.5;   // ~0.6s of darting, then ~0.9s of being trackable
   }
   if (e.userData.hp <= 0) {
     e.userData.dead = true;
@@ -1820,6 +1843,7 @@ function updateWeaver(e, ud, dt, dist) {
   _wv1.copy(player.pos).sub(e.position); _wv1.y = 0;
   _wv2.copy(_wv1).normalize();
   _wv3.set(0, 0, 0);
+  if (ud.evadeCd > 0) ud.evadeCd -= dt;
   if (ud.evadeT > 0) {
     ud.evadeT -= dt;
     _wv3.copy(ud.evadeDir);          // hit reaction: a hard lateral dart, no weaving
