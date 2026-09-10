@@ -72,8 +72,9 @@
     <div><b>SHIFT</b><br>sprint</div>
     <div><b>SPACE</b><br>jump</div>
     <div><b>R</b><br>reload</div>
+    <div><b>G</b><br>throw frag</div>
     <div><b>Q / E</b><br>lean</div>
-    <div><b>TAB / 1-5</b><br>weapons</div>
+    <div><b>WHEEL · TAB<br>or 1-6</b><br>weapons</div>
     <div><b>ESC</b><br>pause</div>
   </div>
   <div class="keys">
@@ -82,6 +83,7 @@
     <div><b>3 SNIPER</b><br>one-shot / 5 rds</div>
     <div><b>4 BATTLEAXE</b><br>slow cleave / huge</div>
     <div><b>5 LIGHTSABER</b><br>fast slashes / light</div>
+    <div><b>6 FRAG</b><br>2 per wave / G throws</div>
   </div>
   <div style="display:flex;gap:18px;margin-top:26px">
     <button class="btn" id="playBtn" style="margin-top:0">ENTER THE ARENA</button>
@@ -124,8 +126,9 @@
     <div><b>SHIFT</b><br>sprint</div>
     <div><b>SPACE</b><br>jump</div>
     <div><b>R</b><br>reload</div>
+    <div><b>G</b><br>throw frag</div>
     <div><b>Q / E</b><br>lean</div>
-    <div><b>TAB / 1-5</b><br>weapons</div>
+    <div><b>WHEEL · TAB<br>or 1-6</b><br>weapons</div>
     <div><b>ESC</b><br>pause</div>
   </div>
   <div style="display:flex;gap:18px;margin-top:26px">
@@ -193,8 +196,13 @@ const WEAPONS = {
   // — and the wider sweep forgives sloppy aim.
   saber:   { kind: 'melee',   name: 'LIGHTSABER', mag: null, fireCd: 0, reload: 0, windup: 0.13, strike: 0.07, recover: 0.26,
              dmg: 55, hsMult: 2, reach: 3.2, arc: 0.78, speedMult: 1, sfx: 'saber' },
+  // Frag grenades. `mag` here is the per-round ALLOWANCE, not a magazine: you are
+  // issued FRAGS_PER_WAVE of them and they are reissued when a new wave starts.
+  frag:    { kind: 'grenade', name: 'FRAG',    mag: 2, fireCd: 0.6, reload: 0,
+             dmg: 150, radius: 6, fuse: 1.7, throwSpeed: 21, sfx: 'throw' },
 };
-const WEAPON_ORDER = ['rifle', 'shotgun', 'sniper', 'axe', 'saber'];
+const WEAPON_ORDER = ['rifle', 'shotgun', 'sniper', 'axe', 'saber', 'frag'];
+const FRAGS_PER_WAVE = 2;   // the entire allowance per wave — rebalance here
 const HEAD_Y = 1.5;
 
 // ---------- audio ----------
@@ -351,6 +359,17 @@ function sfx(type) {
       s.connect(bf); bf.connect(g);
       g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.18, t + 0.07); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
       s.start(t);
+    } else if (type === 'throw') {
+      // pin ping, then the frag leaving the hand
+      const o = a.createOscillator(); o.type = 'square'; o.frequency.value = 2100;
+      o.connect(g); g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      o.start(t); o.stop(t + 0.06);
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.3);
+      const f = a.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
+      f.frequency.setValueAtTime(500, t + 0.05); f.frequency.exponentialRampToValueAtTime(1800, t + 0.22);
+      const sg = a.createGain(); sg.connect(a.destination);
+      sg.gain.setValueAtTime(0.001, t + 0.05); sg.gain.exponentialRampToValueAtTime(0.2, t + 0.1); sg.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      s.connect(f); s.connect(sg); s.start(t + 0.05);
     } else if (type === 'boom') {
       const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.6);
       const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(70, t + 0.55);
@@ -617,6 +636,24 @@ const gunModels = {};                   // one model group per weapon
     gunModels.saber = g;
   }
 
+  // --- FRAG (in hand) ---
+  {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3f4a35, roughness: 0.75, metalness: 0.35 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), bodyMat);
+    body.scale.set(0.85, 1.15, 0.85); body.position.set(0, -0.04, -0.2);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.03), bodyMat);
+    plate.position.set(0, -0.04, -0.2);
+    const spoon = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.11, 0.05), new THREE.MeshStandardMaterial({ color: 0x8f9aa6, roughness: 0.4, metalness: 0.9 }));
+    spoon.position.set(0.03, 0.06, -0.2); spoon.rotation.z = 0.25;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 10), new THREE.MeshStandardMaterial({ color: 0x9aa6b4, roughness: 0.3, metalness: 1 }));
+    cap.position.set(0, 0.09, -0.2);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.16), skin);
+    hand.position.set(0, -0.04, -0.02);
+    g.add(body, plate, spoon, cap, hand);
+    gunModels.frag = g;
+  }
+
   for (const k of WEAPON_ORDER) { gunModels[k].visible = false; gun.add(gunModels[k]); }
   gunModels.rifle.visible = true;
   gun.position.set(0.24, -0.22, -0.5);
@@ -721,6 +758,20 @@ function swingPose(w, pose) {
       const e = easeOut(u);
       pose.ry = 1.25 * dir * e; pose.rz = -0.45 * dir * e; pose.px = 0.16 * dir * e; pose.py = -0.14 * e;
     }
+  }
+}
+
+// Grenade throw: the arm cocks back, then whips through. The frag leaves the hand
+// at NADE_RELEASE and the viewmodel hides it until the animation finishes.
+function throwPose(pose) {
+  const rel = NADE_ANIM - NADE_RELEASE;         // elapsed time at the release
+  const t = NADE_ANIM - nadeAnimT;              // elapsed
+  if (t < rel) {
+    const u = t / rel;
+    pose.rx = -0.55 * u; pose.rz = 0.3 * u; pose.py = 0.12 * u; pose.pz = 0.14 * u;
+  } else {
+    const e = 1 - Math.pow(1 - Math.min(1, (t - rel) / NADE_RELEASE), 3);
+    pose.rx = -0.55 + 1.0 * e; pose.rz = 0.3 - 0.42 * e; pose.py = 0.12 - 0.2 * e; pose.pz = 0.14 - 0.6 * e;
   }
 }
 
@@ -880,11 +931,16 @@ function makeEnemy(type) {
     g.userData.radius = 0.9; g.userData.h = 2.0;
     // The toughest thing in the arena: it is a small, moving, hovering core that is
     // awkward to hit, so it needs real durability to survive incoming fire.
-    g.userData.hp = 120; g.userData.dmg = 30; g.userData.speed = 3.5; g.userData.fireInt = 2.75; g.userData.score = 60;
+    // Deliberately the biggest health pool in the game. It is a small, hovering,
+    // juking core, and its core counts as a headshot, so its HP has to absorb
+    // punishing single hits: 500 is 3 sniper core hits, 6 sniper body shots,
+    // 30 rifle rounds or 3 axe chops. It should never be a one-shot kill.
+    g.userData.hp = 500; g.userData.dmg = 30; g.userData.speed = 3.5; g.userData.fireInt = 2.75; g.userData.score = 120;
     g.userData.ai = 'weaver';
     g.userData.hoverY = 3.05; g.userData.spawnY = 8;   // flies in from above
     g.userData.charging = 0;
     g.userData.evadeT = 0;                            // darts sideways when hit
+    g.userData.evadeCd = 0;                           // and then cannot dart again for a moment
     g.userData.evadeDir = new THREE.Vector3();
     g.userData.baseEmissive = 0x2ad8ff;
     g.userData.fx = 0x2ad8ff; g.userData.fxY = 3.0;
@@ -1046,6 +1102,9 @@ function setWave(n) {
   spawnQueue = 4 + n * 2;
   spawnT = 1.2;
   waveBanner = 3;
+  // the grenade allowance is per round: reissued every wave, and never by a reload
+  player.mags.frag = FRAGS_PER_WAVE;
+  if (curWeapon === 'frag') player.ammo = FRAGS_PER_WAVE;
   setBanner('WAVE ' + n);
   sfx('wave');
 }
@@ -1058,6 +1117,9 @@ function resetGame() {
   for (const b of blasts) { scene.remove(b.mesh); scene.remove(b.light); }
   blasts.length = 0;
   for (const m of blastMarks) m.visible = false;
+  for (const n of nades) scene.remove(n.mesh);
+  nades.length = 0;
+  nadeAnimT = -1;
   player.pos.set(0, PLAYER_H, 12);
   player.vel.set(0, 0, 0);
   player.hp = player.maxHp;
@@ -1078,6 +1140,7 @@ const keys = {};
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'KeyR' && state === 'playing') startReload();
+  if (e.code === 'KeyG' && state === 'playing') throwGrenade();   // quick throw, keeps your current weapon
   if (e.code === 'Tab') {   // Tab cycles weapons in both normal and debug mode
     e.preventDefault();
     if (state === 'playing') {
@@ -1115,11 +1178,26 @@ document.addEventListener('keydown', e => {
       if (e.code === 'Digit3') switchWeapon('sniper');
       if (e.code === 'Digit4') switchWeapon('axe');
       if (e.code === 'Digit5') switchWeapon('saber');
+      if (e.code === 'Digit6') switchWeapon('frag');
     }
   }
   if (e.code === 'Escape' && (state === 'playing' || state === 'paused')) togglePause();
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Mouse wheel also cycles weapons, in both directions. The digit keys remain the
+// direct-select method — players differ on this, so both are always live.
+let wheelLockT = 0;
+window.addEventListener('wheel', e => {
+  if (state !== 'playing') return;
+  e.preventDefault();
+  const now = performance.now();
+  if (now - wheelLockT < 90) return;          // one weapon per notch of a spin
+  wheelLockT = now;
+  const i = WEAPON_ORDER.indexOf(curWeapon);
+  const dir = e.deltaY > 0 ? 1 : -1;
+  switchWeapon(WEAPON_ORDER[(i + dir + WEAPON_ORDER.length) % WEAPON_ORDER.length]);
+}, { passive: false });
 document.addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouseDown = false; aiming = false; });
 
 let mouseDown = false;
@@ -1191,6 +1269,9 @@ function quitToMenu() {
   for (const b of blasts) { scene.remove(b.mesh); scene.remove(b.light); }
   blasts.length = 0;
   for (const m of blastMarks) m.visible = false;
+  for (const n of nades) scene.remove(n.mesh);
+  nades.length = 0;
+  nadeAnimT = -1;
   for (const t of tracerPool) t.visible = false;
   for (const s of sparkPool) s.visible = false;
   player.reloading = false; player.reloadT = 0;
@@ -1234,7 +1315,7 @@ renderer.domElement.addEventListener('click', () => {
 const raycaster = new THREE.Raycaster();
 function startReload() {
   const w = WEAPONS[curWeapon];
-  if (w.mag == null) return;                       // melee weapons never reload
+  if (w.kind !== 'hitscan') return;                // only magazine-fed weapons reload
   if (player.reloading || player.ammo === w.mag) return;
   player.reloading = true;
   player.reloadT = w.reload;
@@ -1289,10 +1370,141 @@ function updateMelee(dt) {
   if (!meleeHitDone && meleeT >= w.windup) { meleeHitDone = true; performMeleeHit(w); }
   if (meleeT >= w.windup + w.strike + w.recover) meleeT = -1;
 }
+// ---------- frag grenades ----------
+// A thrown, physics-driven projectile with a fuse: it arcs, bounces off cover and
+// detonates on the fuse or on contact with a hostile. Deliberately no self-damage
+// — reading the bounce is already enough to think about.
+const NADE_G = 19;
+const nades = [];
+const _ng1 = new THREE.Vector3(), _ng2 = new THREE.Vector3();
+const nadeGeo = new THREE.SphereGeometry(0.11, 12, 10);
+const nadeMat = new THREE.MeshStandardMaterial({ color: 0x46523a, roughness: 0.7, metalness: 0.4 });
+let nadeAnimT = -1;                                  // viewmodel throw animation, -1 = idle
+const NADE_ANIM = 0.5, NADE_RELEASE = 0.32;          // total length, and when it leaves the hand
+
+function throwGrenade() {
+  const w = WEAPONS.frag;
+  if (player.fireCd > 0) return;
+  // The allowance is its own pool (player.mags.frag), NOT player.ammo — that holds
+  // the EQUIPPED weapon's ammo, so spending it here would eat a rifle round when you
+  // quick-throw with the rifle out.
+  if (player.mags.frag <= 0) { sfx('dry'); return; }   // none left until the next wave
+  if (!(dbg.active && dbg.ammo)) player.mags.frag--;
+  if (curWeapon === 'frag') player.ammo = player.mags.frag;   // keep the held-weapon view in step
+  player.fireCd = w.fireCd;
+  nadeAnimT = NADE_ANIM;
+  sfx('throw');
+
+  const dir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
+  const from = player.pos.clone().addScaledVector(dir, 0.6);
+  from.y -= 0.2;
+  const vel = dir.clone().multiplyScalar(w.throwSpeed);
+  vel.y += 4.4;                                      // an arc, not a bullet
+  const mesh = new THREE.Mesh(nadeGeo, nadeMat.clone());
+  mesh.position.copy(from);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff5a3d, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  bulb.position.set(0, 0.12, 0);
+  const light = new THREE.PointLight(0xff5a3d, 1.6, 5);
+  light.position.set(0, 0.12, 0);
+  mesh.add(bulb, light);
+  scene.add(mesh);
+  nades.push({ mesh: mesh, bulb: bulb, light: light, vel: vel, fuse: w.fuse, spin: new THREE.Vector3(Math.random() * 8, Math.random() * 8, Math.random() * 8) });
+}
+
+// shared explosion visual (the weaver's shells use this too)
+function spawnBlast(pos, radius, color, lightColor) {
+  const at = pos.clone(); at.y = Math.max(0.5, at.y);
+  const bl = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.5, 14, 10),
+    new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+  bl.position.copy(at);
+  const l = new THREE.PointLight(lightColor || color, 9, 18);
+  l.position.copy(at);
+  scene.add(bl); scene.add(l);
+  blasts.push({ mesh: bl, light: l, t: 0, dur: 0.45 });
+}
+
+function detonateGrenade(pos) {
+  const w = WEAPONS.frag;
+  sfx('boom');
+  spawnBlast(pos, w.radius, 0xffb03d, 0xff8a3d);
+  fireSparks(pos, 16, 0xffc46a);
+  fireSparks(pos, 10, 0xff7a2d);
+  shotKills = 0;                                     // one blast = one "action" for the banner
+  const at = pos.clone(); at.y = Math.max(0.6, at.y);   // measure from roughly blast height
+  for (const e of enemies) {
+    if (e.userData.dead) continue;
+    const d = e.position.distanceTo(pos);
+    if (d > w.radius + e.userData.radius) continue;
+    // cover contains the blast: if a crate or pillar is between the blast and the
+    // hostile, it is shielded
+    _ng2.set(e.position.x, e.userData.fxY || 0.9, e.position.z);
+    raycaster.set(at, _ng2.clone().sub(at).normalize());
+    raycaster.far = at.distanceTo(_ng2);
+    if (raycaster.intersectObjects(worldMeshes, false).length) continue;
+    // falls off with distance; a direct hit lands close to full damage
+    let dmg = w.dmg * (0.4 + 0.6 * (1 - Math.min(1, d / w.radius)));
+    if (dbg.active && dbg.oneshot) dmg = Infinity;
+    damageEnemy(e, dmg, e.position.clone().setY(e.userData.fxY || 0.9), false);
+  }
+  awardMultiKill();
+}
+
+function updateNades(dt) {
+  for (let i = nades.length - 1; i >= 0; i--) {
+    const n = nades[i];
+    n.fuse -= dt;
+    n.vel.y -= NADE_G * dt;
+    n.mesh.position.addScaledVector(n.vel, dt);
+    n.mesh.rotation.x += n.spin.x * dt; n.mesh.rotation.y += n.spin.y * dt; n.mesh.rotation.z += n.spin.z * dt;
+    const p = n.mesh.position;
+    const urgent = Math.max(0, 1 - n.fuse / 0.8);     // fizzing faster as the fuse runs out
+    const blink = 0.5 + 0.5 * Math.sin(performance.now() * (0.012 + urgent * 0.05));
+    n.light.intensity = 0.6 + blink * (1.4 + urgent * 2.4);
+    n.bulb.material.opacity = 0.35 + blink * 0.65;
+    n.bulb.scale.setScalar(0.8 + blink * 0.5);
+
+    if (p.y < 0.11) {                                // floor bounce
+      p.y = 0.11;
+      if (n.vel.y < 0) n.vel.y = -n.vel.y * 0.42;
+      n.vel.x *= 0.7; n.vel.z *= 0.7;
+    }
+    const lim = ARENA_HALF - 0.4;                    // arena walls
+    if (p.x < -lim) { p.x = -lim; n.vel.x = Math.abs(n.vel.x) * 0.45; }
+    if (p.x > lim) { p.x = lim; n.vel.x = -Math.abs(n.vel.x) * 0.45; }
+    if (p.z < -lim) { p.z = -lim; n.vel.z = Math.abs(n.vel.z) * 0.45; }
+    if (p.z > lim) { p.z = lim; n.vel.z = -Math.abs(n.vel.z) * 0.45; }
+    for (const c of colliders) {                     // cover, reflected off the shallowest face
+      if (p.x > c.min.x - 0.11 && p.x < c.max.x + 0.11 && p.y > c.min.y - 0.11 && p.y < c.max.y + 0.11 && p.z > c.min.z - 0.11 && p.z < c.max.z + 0.11) {
+        const px = Math.min(p.x + 0.11 - c.min.x, c.max.x - (p.x - 0.11));
+        const py = Math.min(p.y + 0.11 - c.min.y, c.max.y - (p.y - 0.11));
+        const pz = Math.min(p.z + 0.11 - c.min.z, c.max.z - (p.z - 0.11));
+        if (px <= py && px <= pz) { p.x += (p.x > (c.min.x + c.max.x) / 2 ? px : -px); n.vel.x *= -0.45; }
+        else if (py <= pz) { p.y += (p.y > (c.min.y + c.max.y) / 2 ? py : -py); n.vel.y *= -0.45; }
+        else { p.z += (p.z > (c.min.z + c.max.z) / 2 ? pz : -pz); n.vel.z *= -0.45; }
+        break;
+      }
+    }
+    let boom = n.fuse <= 0;
+    if (!boom) {                                     // contact detonation
+      for (const e of enemies) {
+        if (e.userData.dead) continue;
+        if (p.distanceTo(_ng1.set(e.position.x, e.userData.fxY || 0.9, e.position.z)) < e.userData.radius + 0.35) { boom = true; break; }
+      }
+    }
+    if (boom) {
+      detonateGrenade(p.clone());
+      scene.remove(n.mesh);
+      nades.splice(i, 1);
+    }
+  }
+}
+
 function tryShoot() {
   if (player.reloading || player.fireCd > 0) return;
   const w = WEAPONS[curWeapon];
   if (w.kind === 'melee') return startMelee(w);   // no ammo to spend
+  if (w.kind === 'grenade') return throwGrenade();
   if (player.ammo <= 0) { sfx('dry'); startReload(); return; }
   if (!(dbg.active && dbg.ammo)) player.ammo--;   // debug: infinite ammo keeps the mag topped up
   else { player.ammo = w.mag; player.mags[curWeapon] = w.mag; }
@@ -1395,11 +1607,15 @@ function damageEnemy(e, dmg, point, headshot) {
   // knockback
   const kb = new THREE.Vector3().subVectors(e.position, player.pos).setY(0).normalize().multiplyScalar(0.35);
   e.position.add(kb);
-  // Weavers are hard to finish: every hit makes one dart sideways (mostly across the
+  // Weavers are hard to finish: a hit makes it dart sideways (mostly across the
   // player's view rather than straight away), so sustained fire has to track it.
-  if (isLiveWeaver(e)) {
+  // Gated by a cooldown, otherwise a 500 HP weaver under fire would dart 4m for every
+  // bullet you land and never be killable — the cooldown turns that into a rhythm of
+  // dart, track, dart again that the player can actually work with.
+  if (isLiveWeaver(e) && e.userData.evadeCd <= 0) {
     e.userData.evadeDir.set(-kb.z, 0, kb.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1).addScaledVector(kb, 0.6).normalize();
     e.userData.evadeT = 0.6;
+    e.userData.evadeCd = 1.5;   // ~0.6s of darting, then ~0.9s of being trackable
   }
   if (e.userData.hp <= 0) {
     e.userData.dead = true;
@@ -1627,6 +1843,7 @@ function updateWeaver(e, ud, dt, dist) {
   _wv1.copy(player.pos).sub(e.position); _wv1.y = 0;
   _wv2.copy(_wv1).normalize();
   _wv3.set(0, 0, 0);
+  if (ud.evadeCd > 0) ud.evadeCd -= dt;
   if (ud.evadeT > 0) {
     ud.evadeT -= dt;
     _wv3.copy(ud.evadeDir);          // hit reaction: a hard lateral dart, no weaving
@@ -1723,14 +1940,7 @@ function detonateMortar(pos, radius, dmg, marker) {
   sfx('boom');
   fireSparks(pos, 14, 0x8ff2ff);
   fireSparks(pos, 8, 0xff5ad8);
-  const at = pos.clone(); at.y = Math.max(0.5, at.y);
-  const bl = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.5, 14, 10),
-    new THREE.MeshBasicMaterial({ color: 0xbdf6ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
-  bl.position.copy(at);
-  const l = new THREE.PointLight(0x8ff2ff, 9, 18);
-  l.position.copy(at);
-  scene.add(bl); scene.add(l);
-  blasts.push({ mesh: bl, light: l, t: 0, dur: 0.45 });
+  spawnBlast(pos, radius, 0xbdf6ff, 0x8ff2ff);
   mortarsDetonated++;
   if (player.alive) {   // area damage, softer at the rim
     const d = _wv1.copy(player.pos).sub(pos).length();
@@ -1967,6 +2177,12 @@ function updatePlayer(dt) {
   // melee swing pose: rotations are added on top of the kick/bob transform below
   const meleePose = { rx: 0, ry: 0, rz: 0, px: 0, py: 0, pz: 0 };
   if (WEAPONS[curWeapon].kind === 'melee' && meleeT >= 0) swingPose(WEAPONS[curWeapon], meleePose);
+  if (nadeAnimT >= 0) {
+    if (WEAPONS[curWeapon].kind === 'grenade') throwPose(meleePose);
+    nadeAnimT -= dt;
+    if (nadeAnimT <= NADE_RELEASE && gunModels.frag.visible) gunModels.frag.visible = false;
+    if (nadeAnimT < 0) { nadeAnimT = -1; if (curWeapon === 'frag') gunModels.frag.visible = true; }
+  }
 
   // apply gun kick & bob to viewmodel (+ reload animation)
   gunKick = Math.max(0, gunKick - dt * 1.2);
@@ -2009,10 +2225,13 @@ function updateHud() {
   const hpColor = hpPct > 60 ? '#5ad87a' : hpPct > 30 ? '#e8c34a' : '#e84a4a';
   const w = WEAPONS[curWeapon];
   const cd = player.reloading ? ' RELOADING…' : '';
-  const ammoTxt = w.mag == null ? '∞' : `${player.ammo}/${w.mag}`;   // melee never runs dry
+  const ammoTxt = w.kind === 'grenade' ? `×${player.ammo}`            // a count, not a magazine
+                : w.mag == null ? '∞'                                 // melee never runs dry
+                : `${player.ammo}/${w.mag}`;
   cdHud.innerHTML =
     `<span style="color:${hpColor};font-weight:700">HP ${Math.ceil(player.hp)}</span>` +
     ` &nbsp;·&nbsp; <b style="color:#8fd0ff">${w.name}</b> ${ammoTxt}${cd}` +
+    ` &nbsp;·&nbsp; <span style="color:${player.mags.frag > 0 ? '#ffb03d' : '#6b7482'}">FRAGS ×${player.mags.frag}</span>` +
     ` &nbsp;·&nbsp; WAVE ${wave}` +
     ` &nbsp;·&nbsp; SCORE ${score}` +
     ` &nbsp;·&nbsp; HOSTILES ${enemies.filter(e => !e.userData.dead).length + spawnQueue}`;
@@ -2083,6 +2302,7 @@ function stepGame(now, fromRAF) {
         }
       }
       updateMelee(dt);
+      updateNades(dt);
       updateSaberHum(dt);
       updatePlayer(dt);
       updateSpawner(wdt);
@@ -2150,7 +2370,10 @@ function stepGame(now, fromRAF) {
  get spawnQueue() { return spawnQueue; },
  get curWeapon() { return curWeapon; },
  startGame, stepGame, spawnEnemy, damageEnemy, tryShoot, switchWeapon, quitToMenu, togglePause,
-startMelee, performMeleeHit,
+startReload, setWave,
+startMelee, performMeleeHit, throwGrenade, detonateGrenade,
+get nades() { return nades; },
+get nadeAnimT() { return nadeAnimT; },
 get meleeT() { return meleeT; },
 get meleeHitDone() { return meleeHitDone; },
 pickEnemyType, mortarFire, detonateMortar, blastMarks, blasts,
