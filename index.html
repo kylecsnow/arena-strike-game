@@ -523,15 +523,24 @@ gun.add(muzzle);
 
 // ---------- weapon switching ----------
 let curWeapon = 'rifle';
+function fullMags() {
+  const m = {};
+  for (const k of WEAPON_ORDER) m[k] = WEAPONS[k].mag;
+  return m;
+}
 function switchWeapon(name) {
   if (!WEAPONS[name] || name === curWeapon) return;
   gunModels[curWeapon].visible = false;
+  player.mags[curWeapon] = player.ammo;   // bank what this gun actually had left
   curWeapon = name;
   gunModels[name].visible = true;
   aiming = false;   // RMB held: sniper = scope, rifle/shotgun = iron sights (slight zoom)
+  // Swapping cancels an in-flight reload and grants nothing: the rounds only appear
+  // when a reload runs to completion. Each weapon keeps its own magazine, so a swap
+  // is never a shortcut to a full clip.
   player.reloading = false; player.reloadT = 0;
   reloadAnimT = -1;
-  player.ammo = WEAPONS[name].mag;
+  player.ammo = player.mags[name];        // the new gun resumes with its own magazine
   player.fireCd = Math.max(player.fireCd, 0.3);   // swap delay
   sfx('swap');
 }
@@ -764,7 +773,9 @@ const player = {
   vel: new THREE.Vector3(),
   onGround: true,
   hp: 100, maxHp: 100,
-  ammo: 30, reserve: Infinity,  reloading: false, reloadT: 0,
+  ammo: 30,                     // live ammo for the equipped weapon ONLY
+  mags: fullMags(),             // per-weapon stored ammo; only a completed reload refills it
+  reserve: Infinity,  reloading: false, reloadT: 0,
   fireCd: 0,
   bobT: 0, bobAmp: 0,
   yaw: 0, pitch: 0,
@@ -868,6 +879,7 @@ function resetGame() {
   player.pos.set(0, PLAYER_H, 12);
   player.vel.set(0, 0, 0);
   player.hp = player.maxHp;
+  player.mags = fullMags();
   player.ammo = WEAPONS[curWeapon].mag;
   player.reloading = false; player.reloadT = 0;
   reloadAnimT = -1;
@@ -1048,7 +1060,7 @@ function tryShoot() {
   const w = WEAPONS[curWeapon];
   if (player.ammo <= 0) { sfx('dry'); startReload(); return; }
   if (!(dbg.active && dbg.ammo)) player.ammo--;   // debug: infinite ammo keeps the mag topped up
-  else player.ammo = w.mag;
+  else { player.ammo = w.mag; player.mags[curWeapon] = w.mag; }
   player.fireCd = w.fireCd;
   sfx(w.sfx);
   shotKills = 0;   // reset per action: one tryShoot() call = one shot, regardless of pellets/pierce
@@ -1818,7 +1830,11 @@ function stepGame(now, fromRAF) {
       if (mouseDown) tryShoot();
       if (player.reloading) {
         player.reloadT -= dt;
-        if (player.reloadT <= 0) { player.reloading = false; player.ammo = WEAPONS[curWeapon].mag; }
+        if (player.reloadT <= 0) {
+          player.reloading = false;
+          player.ammo = WEAPONS[curWeapon].mag;
+          player.mags[curWeapon] = player.ammo;   // and that is the ONLY way ammo comes back
+        }
       }
       updatePlayer(dt);
       updateSpawner(wdt);
