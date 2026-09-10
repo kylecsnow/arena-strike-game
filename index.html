@@ -175,12 +175,19 @@ const PLAYER_H = 1.62;           // eye height
 const CROUCH_H = 1.05;          // eye height while crouching (CTRL)
 const GRAVITY = 22;
 const BASE_SPEED = 5.2, SPRINT_MULT = 1.55, JUMP_V = 8.2;
+// kind: 'hitscan' (raycast + magazine) or 'melee' (swing arc, no ammo).
+// Melee weapons carry no mag/reload: they are always "loaded", and their cost is
+// time — a long wind-up before the blow lands, then a recovery before the next.
 const WEAPONS = {
-  rifle:   { name: 'RIFLE',   mag: 30, fireCd: 0.105, reload: 1.5, dmg: 17,  hsMult: 2,   spread: 0.006,  pellets: 1, recoil: 0.012, kick: 0.06, sfx: 'shot' },
-  shotgun: { name: 'SHOTGUN', mag: 6,  fireCd: 0.75,  reload: 2.2, dmg: 12,  hsMult: 2,   spread: 0.11,   pellets: 8, recoil: 0.035, kick: 0.16, sfx: 'shotgun' },
-  sniper:  { name: 'SNIPER',  mag: 5,  fireCd: 1.1,   reload: 2.4, dmg: 95,  hsMult: 2.5, spread: 0.0008, pellets: 1, recoil: 0.02,  kick: 0.14, sfx: 'sniper' },
+  rifle:   { kind: 'hitscan', name: 'RIFLE',   mag: 30, fireCd: 0.105, reload: 1.5, dmg: 17,  hsMult: 2,   spread: 0.006,  pellets: 1, recoil: 0.012, kick: 0.06, sfx: 'shot' },
+  shotgun: { kind: 'hitscan', name: 'SHOTGUN', mag: 6,  fireCd: 0.75,  reload: 2.2, dmg: 12,  hsMult: 2,   spread: 0.11,   pellets: 8, recoil: 0.035, kick: 0.16, sfx: 'shotgun' },
+  sniper:  { kind: 'hitscan', name: 'SNIPER',  mag: 5,  fireCd: 1.1,   reload: 2.4, dmg: 95,  hsMult: 2.5, spread: 0.0008, pellets: 1, recoil: 0.02,  kick: 0.14, sfx: 'sniper' },
+  // The axe: brutal, slow, and it cleaves. Anything that survives a hit is still
+  // standing in reach when the recovery ends — which is the point of the wind-up.
+  axe:     { kind: 'melee',   name: 'BATTLEAXE', mag: null, fireCd: 0, reload: 0, windup: 0.55, strike: 0.12, recover: 0.55,
+             dmg: 200, hsMult: 1.6, reach: 3.4, arc: 0.62, speedMult: 0.82, sfx: 'swing' },
 };
-const WEAPON_ORDER = ['rifle', 'shotgun', 'sniper'];
+const WEAPON_ORDER = ['rifle', 'shotgun', 'sniper', 'axe'];
 const HEAD_Y = 1.5;
 
 // ---------- audio ----------
@@ -300,6 +307,27 @@ function sfx(type) {
       o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(560, t + 0.22);
       o.connect(g); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
       o.start(t); o.stop(t + 0.28);
+    } else if (type === 'swing') {
+      // melee wind-up/whiff: a filtered whoosh rising then falling
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.34);
+      const f = a.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2;
+      f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(1500, t + 0.2); f.frequency.exponentialRampToValueAtTime(240, t + 0.32);
+      s.connect(f); f.connect(g);
+      g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.32, t + 0.1); g.gain.exponentialRampToValueAtTime(0.001, t + 0.33);
+      s.start(t);
+    } else if (type === 'cleave') {
+      // the blow landing: low crunch plus a body thump
+      const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.22);
+      const f = a.createBiquadFilter(); f.type = 'lowpass';
+      f.frequency.setValueAtTime(1100, t); f.frequency.exponentialRampToValueAtTime(90, t + 0.19);
+      s.connect(f); f.connect(g);
+      g.gain.setValueAtTime(0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.21);
+      s.start(t);
+      const o = a.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(64, t + 0.17);
+      const og = a.createGain(); og.connect(a.destination);
+      og.gain.setValueAtTime(0.32, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.19);
+      o.connect(og); o.start(t); o.stop(t + 0.21);
     } else if (type === 'boom') {
       const s = a.createBufferSource(); s.buffer = noiseBuf(a, 0.6);
       const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(70, t + 0.55);
@@ -511,6 +539,37 @@ const gunModels = {};                   // one model group per weapon
     gunModels.sniper = g;
   }
 
+  // --- BATTLEAXE ---
+  // Deliberately oversized: a two-handed haft with a double-bit head and a spike.
+  {
+    const g = new THREE.Group();
+    const steel = new THREE.MeshStandardMaterial({ color: 0x93a1b2, roughness: 0.32, metalness: 0.95 });
+    const steelDark = new THREE.MeshStandardMaterial({ color: 0x46515e, roughness: 0.5, metalness: 0.85 });
+    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 1.05, 10), wood);
+    haft.rotation.x = Math.PI / 2; haft.position.set(0, 0, -0.42);
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 10), steelDark);
+    collar.rotation.x = Math.PI / 2; collar.position.set(0, 0, -0.9);
+    // double-bit head: two blades fanning off the collar, plus a forward spike
+    const bladeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.3), steel);
+    bladeL.position.set(-0.19, 0.03, -0.98); bladeL.rotation.z = 0.22;
+    const bladeR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.3), steel);
+    bladeR.position.set(0.19, 0.03, -0.98); bladeR.rotation.z = -0.22;
+    const edgeL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.4, 0.06), new THREE.MeshStandardMaterial({ color: 0xdce8f5, roughness: 0.15, metalness: 1 }));
+    edgeL.position.set(-0.22, 0.03, -1.11);
+    const edgeR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.4, 0.06), new THREE.MeshStandardMaterial({ color: 0xdce8f5, roughness: 0.15, metalness: 1 }));
+    edgeR.position.set(0.22, 0.03, -1.11);
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.2, 8), steel);
+    spike.rotation.x = -Math.PI / 2; spike.position.set(0, 0, -1.22);
+    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.16, 8), steelDark);
+    wrap.rotation.x = Math.PI / 2; wrap.position.set(0, 0, -0.66);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.17), skin);
+    hand.position.set(0, -0.02, 0.02);
+    const hand2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.17), skin);
+    hand2.position.set(0, -0.02, -0.28);
+    g.add(haft, collar, bladeL, bladeR, edgeL, edgeR, spike, wrap, hand, hand2);
+    gunModels.axe = g;
+  }
+
   for (const k of WEAPON_ORDER) { gunModels[k].visible = false; gun.add(gunModels[k]); }
   gunModels.rifle.visible = true;
   gun.position.set(0.24, -0.22, -0.5);
@@ -524,25 +583,66 @@ gun.add(muzzle);
 // ---------- weapon switching ----------
 let curWeapon = 'rifle';
 function fullMags() {
+  // Only magazine-fed weapons get a store entry; melee weapons have no ammo at all.
   const m = {};
-  for (const k of WEAPON_ORDER) m[k] = WEAPONS[k].mag;
+  for (const k of WEAPON_ORDER) if (WEAPONS[k].mag != null) m[k] = WEAPONS[k].mag;
   return m;
 }
 function switchWeapon(name) {
   if (!WEAPONS[name] || name === curWeapon) return;
+  const from = WEAPONS[curWeapon], to = WEAPONS[name];
   gunModels[curWeapon].visible = false;
-  player.mags[curWeapon] = player.ammo;   // bank what this gun actually had left
+  if (from.mag != null) player.mags[curWeapon] = player.ammo;   // bank what this gun actually had left
   curWeapon = name;
   gunModels[name].visible = true;
+  meleeT = -1;                            // a swap abandons any swing in progress
   aiming = false;   // RMB held: sniper = scope, rifle/shotgun = iron sights (slight zoom)
   // Swapping cancels an in-flight reload and grants nothing: the rounds only appear
   // when a reload runs to completion. Each weapon keeps its own magazine, so a swap
   // is never a shortcut to a full clip.
   player.reloading = false; player.reloadT = 0;
   reloadAnimT = -1;
-  player.ammo = player.mags[name];        // the new gun resumes with its own magazine
+  player.ammo = to.mag != null ? player.mags[name] : 0;   // the new gun resumes with its own magazine
   player.fireCd = Math.max(player.fireCd, 0.3);   // swap delay
   sfx('swap');
+}
+
+// Swing poses. Both ease into the wind-up (slow, readable) and snap through the
+// strike, which is what sells the weight.
+function swingPose(w, pose) {
+  const t = meleeT, W = w.windup, S = w.strike, R = w.recover;
+  const easeOut = u => 1 - Math.pow(1 - u, 3);
+  const easeIn = u => u * u * u;
+  const dir = meleeAlt ? 1 : -1;
+  if (curWeapon === 'axe') {
+    // Overhead chop: hauled up and back, then driven down through the target.
+    if (t < W) {
+      const u = easeOut(t / W);
+      pose.rx = -1.55 * u; pose.rz = 0.3 * u; pose.py = 0.24 * u; pose.pz = 0.16 * u; pose.px = -0.06 * u;
+    } else if (t < W + S) {
+      const u = easeIn((t - W) / S);
+      pose.rx = -1.55 + 2.75 * u; pose.rz = 0.3 - 0.45 * u;
+      pose.py = 0.24 - 0.62 * u; pose.pz = 0.16 - 0.55 * u; pose.px = -0.06 + 0.16 * u;
+    } else {
+      const u = 1 - Math.min(1, (t - W - S) / R);
+      const e = easeOut(u);
+      pose.rx = 1.2 * e; pose.rz = -0.15 * e; pose.py = -0.38 * e; pose.pz = -0.39 * e; pose.px = 0.1 * e;
+    }
+  } else {
+    // Saber: a fast horizontal slash, direction alternating each swing.
+    if (t < W) {
+      const u = easeOut(t / W);
+      pose.ry = -1.25 * dir * u; pose.rz = 0.45 * dir * u; pose.px = -0.14 * dir * u; pose.py = 0.1 * u;
+    } else if (t < W + S) {
+      const u = easeIn((t - W) / S);
+      pose.ry = -1.25 * dir + 2.5 * dir * u; pose.rz = 0.45 * dir - 0.9 * dir * u;
+      pose.px = -0.14 * dir + 0.3 * dir * u; pose.py = 0.1 - 0.24 * u;
+    } else {
+      const u = 1 - Math.min(1, (t - W - S) / R);
+      const e = easeOut(u);
+      pose.ry = 1.25 * dir * e; pose.rz = -0.45 * dir * e; pose.px = 0.16 * dir * e; pose.py = -0.14 * e;
+    }
+  }
 }
 
 // muzzle flash
@@ -793,6 +893,9 @@ let shotKills = 0;   // enemies killed by the current shot/action (one tryShoot 
 let killBannerT = null;
 let killBannerEl = null;   // the #kill-banner element, assigned in the banner section below
 let reloadAnimT = -1;   // counts down while the reload viewmodel animation plays; -1 = idle
+let meleeT = -1;        // seconds into the current melee swing; -1 = idle
+let meleeHitDone = false;   // the blow has already landed this swing
+let meleeAlt = false;   // alternates slash direction so repeat swings don't look identical
 
 const cdHud = document.getElementById('cd-hud');
 const dmgEl = document.getElementById('dmg');
@@ -880,7 +983,8 @@ function resetGame() {
   player.vel.set(0, 0, 0);
   player.hp = player.maxHp;
   player.mags = fullMags();
-  player.ammo = WEAPONS[curWeapon].mag;
+  player.ammo = WEAPONS[curWeapon].mag != null ? WEAPONS[curWeapon].mag : 0;
+  meleeT = -1; meleeHitDone = false;
   player.reloading = false; player.reloadT = 0;
   reloadAnimT = -1;
   player.fireCd = 0; player.alive = true;
@@ -926,10 +1030,11 @@ document.addEventListener('keydown', e => {
     }
   }
   if (state === 'playing') {
-    if (!dbg.active || !['Digit1','Digit2','Digit3','Digit4','Digit5','Digit0'].includes(e.code)) {
+    if (!dbg.active || !['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit0'].includes(e.code)) {
       if (e.code === 'Digit1') switchWeapon('rifle');
       if (e.code === 'Digit2') switchWeapon('shotgun');
       if (e.code === 'Digit3') switchWeapon('sniper');
+      if (e.code === 'Digit4') switchWeapon('axe');
     }
   }
   if (e.code === 'Escape' && (state === 'playing' || state === 'paused')) togglePause();
@@ -1049,15 +1154,65 @@ renderer.domElement.addEventListener('click', () => {
 const raycaster = new THREE.Raycaster();
 function startReload() {
   const w = WEAPONS[curWeapon];
+  if (w.mag == null) return;                       // melee weapons never reload
   if (player.reloading || player.ammo === w.mag) return;
   player.reloading = true;
   player.reloadT = w.reload;
   reloadAnimT = w.reload;
   sfx('reload');
 }
+// ---------- melee ----------
+// A swing is wind-up -> strike -> recovery, driven off meleeT. Only the strike
+// frame deals damage, so a swing committed too early simply misses and leaves you
+// standing in recovery while the enemy keeps working on you.
+function startMelee(w) {
+  if (meleeT >= 0) return;                       // mid-swing: the axe is committed
+  meleeT = 0; meleeHitDone = false;
+  meleeAlt = !meleeAlt;                          // alternate the swing so it doesn't loop
+  player.fireCd = w.windup + w.strike + w.recover;
+  sfx(w.sfx);
+}
+const _ml1 = new THREE.Vector3(), _ml2 = new THREE.Vector3(), _mlFlat = new THREE.Vector3();
+function performMeleeHit(w) {
+  shotKills = 0;
+  const fwd = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
+  _mlFlat.set(fwd.x, 0, fwd.z).normalize();      // swings sweep horizontally, so arc is measured flat
+  const eye = player.pos;
+  let struck = 0;
+  for (const e of enemies) {
+    if (e.userData.dead) continue;
+    const ud = e.userData;
+    _ml1.copy(e.position).sub(eye); _ml1.y = 0;
+    const dist = _ml1.length();
+    if (dist > w.reach + ud.radius) continue;               // out of reach
+    if (dist > 1e-4 && _ml1.normalize().angleTo(_mlFlat) > w.arc) continue;   // outside the sweep
+    // don't cleave through cover
+    raycaster.set(eye, _ml2.copy(e.position).sub(eye).normalize());
+    raycaster.far = Math.max(0.1, dist - ud.radius * 0.5);
+    if (raycaster.intersectObjects(worldMeshes, false).length) continue;
+    // aiming at the head earns the headshot multiplier — a tall ask with a 0.62 rad arc
+    _ml2.set(e.position.x, ud.headY, e.position.z).sub(eye).normalize();
+    const headshot = _ml2.angleTo(fwd) <= w.arc * 0.5;
+    let dmg = headshot ? w.dmg * w.hsMult : w.dmg;
+    if (dbg.active && dbg.oneshot) dmg = Infinity;
+    damageEnemy(e, dmg, _ml2.copy(e.position).setY(ud.headY * 0.7), headshot);
+    struck++;
+  }
+  if (struck) sfx('cleave');
+  awardMultiKill();
+}
+function updateMelee(dt) {
+  const w = WEAPONS[curWeapon];
+  if (meleeT < 0) return;
+  if (!w || w.kind !== 'melee') { meleeT = -1; return; }   // swapped away mid-swing
+  meleeT += dt;
+  if (!meleeHitDone && meleeT >= w.windup) { meleeHitDone = true; performMeleeHit(w); }
+  if (meleeT >= w.windup + w.strike + w.recover) meleeT = -1;
+}
 function tryShoot() {
   if (player.reloading || player.fireCd > 0) return;
   const w = WEAPONS[curWeapon];
+  if (w.kind === 'melee') return startMelee(w);   // no ammo to spend
   if (player.ammo <= 0) { sfx('dry'); startReload(); return; }
   if (!(dbg.active && dbg.ammo)) player.ammo--;   // debug: infinite ammo keeps the mag topped up
   else { player.ammo = w.mag; player.mags[curWeapon] = w.mag; }
@@ -1120,6 +1275,10 @@ function tryShoot() {
   flashLight.intensity = curWeapon === 'rifle' ? 3.2 : 5;
 
   // Multi-kill reward: a single action (one shot) that kills 2+ enemies
+  awardMultiKill();
+}
+// One action (shot, cleave, grenade) that killed 2+ enemies earns a banner.
+function awardMultiKill() {
   if (shotKills >= 2) {
     const label = shotKills === 2 ? 'DOUBLE KILL' : shotKills === 3 ? 'TRIPLE KILL' : 'MULTI KILL';
     showKillBanner(label, shotKills);
@@ -1649,6 +1808,7 @@ function updatePlayer(dt) {
   const crouching = !!(keys['ControlLeft'] || keys['ControlRight']);
   let speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? BASE_SPEED * SPRINT_MULT : BASE_SPEED;
   if (crouching) speed *= CROUCH_SPEED_MULT;   // crouched: no sprint bonus, deliberate pace
+  speed *= (WEAPONS[curWeapon].speedMult || 1);   // a big axe makes you lumber
 
   let fx = 0, fz = 0;
   if (keys['KeyW']) fz += 1;
@@ -1724,6 +1884,10 @@ function updatePlayer(dt) {
   camera.rotation.set(player.pitch, player.yaw, 0);
   camera.rotateZ(-player.leanEff * LEAN_ROLL);
 
+  // melee swing pose: rotations are added on top of the kick/bob transform below
+  const meleePose = { rx: 0, ry: 0, rz: 0, px: 0, py: 0, pz: 0 };
+  if (WEAPONS[curWeapon].kind === 'melee' && meleeT >= 0) swingPose(WEAPONS[curWeapon], meleePose);
+
   // apply gun kick & bob to viewmodel (+ reload animation)
   gunKick = Math.max(0, gunKick - dt * 1.2);
   const k = Math.min(1, gunKick * 9);
@@ -1740,14 +1904,15 @@ function updatePlayer(dt) {
   } else if (!player.reloading) {
     reloadAnimT = -1;
   }
-  gun.position.set(0.24 + Math.cos(player.bobT) * player.bobAmp * 2,
-                   -0.22 + bobY * 0.5 + k * 0.05 - rDip,
-                   -0.5 + k * 0.12);
-  gun.rotation.x = k * 0.25 + rTilt;
-  gun.rotation.z = rRoll;
+  gun.position.set(0.24 + Math.cos(player.bobT) * player.bobAmp * 2 + meleePose.px,
+                   -0.22 + bobY * 0.5 + k * 0.05 - rDip + meleePose.py,
+                   -0.5 + k * 0.12 + meleePose.pz);
+  gun.rotation.x = k * 0.25 + rTilt + meleePose.rx;
+  gun.rotation.y = meleePose.ry;
+  gun.rotation.z = rRoll + meleePose.rz;
   // aiming: sniper scope (full zoom + overlay) or iron sights (rifle/shotgun, slight zoom)
   const scoped = aiming && curWeapon === 'sniper';
-  const irons = aiming && !scoped;
+  const irons = aiming && !scoped && WEAPONS[curWeapon].kind !== 'melee';   // no sights to bring up
   const targetFov = scoped ? SCOPE_FOV : irons ? IRON_FOV : BASE_FOV;
   if (camera.fov !== targetFov) {
     camera.fov += (targetFov - camera.fov) * Math.min(1, 14 * dt);
@@ -1764,9 +1929,10 @@ function updateHud() {
   const hpColor = hpPct > 60 ? '#5ad87a' : hpPct > 30 ? '#e8c34a' : '#e84a4a';
   const w = WEAPONS[curWeapon];
   const cd = player.reloading ? ' RELOADING…' : '';
+  const ammoTxt = w.mag == null ? '∞' : `${player.ammo}/${w.mag}`;   // melee never runs dry
   cdHud.innerHTML =
     `<span style="color:${hpColor};font-weight:700">HP ${Math.ceil(player.hp)}</span>` +
-    ` &nbsp;·&nbsp; <b style="color:#8fd0ff">${w.name}</b> ${player.ammo}/${w.mag}${cd}` +
+    ` &nbsp;·&nbsp; <b style="color:#8fd0ff">${w.name}</b> ${ammoTxt}${cd}` +
     ` &nbsp;·&nbsp; WAVE ${wave}` +
     ` &nbsp;·&nbsp; SCORE ${score}` +
     ` &nbsp;·&nbsp; HOSTILES ${enemies.filter(e => !e.userData.dead).length + spawnQueue}`;
@@ -1836,6 +2002,7 @@ function stepGame(now, fromRAF) {
           player.mags[curWeapon] = player.ammo;   // and that is the ONLY way ammo comes back
         }
       }
+      updateMelee(dt);
       updatePlayer(dt);
       updateSpawner(wdt);
       if (waveBanner > 0) {
@@ -1902,6 +2069,9 @@ function stepGame(now, fromRAF) {
  get spawnQueue() { return spawnQueue; },
  get curWeapon() { return curWeapon; },
  startGame, stepGame, spawnEnemy, damageEnemy, tryShoot, switchWeapon, quitToMenu, togglePause,
+startMelee, performMeleeHit,
+get meleeT() { return meleeT; },
+get meleeHitDone() { return meleeHitDone; },
 pickEnemyType, mortarFire, detonateMortar, blastMarks, blasts,
  weapons: WEAPONS,
  dbg,
