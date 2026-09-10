@@ -690,10 +690,14 @@ function makeEnemy(type) {
     g.userData.ring = ring; g.userData.ring2 = ring2; g.userData.shards = shards;
     g.userData.headMesh = core; g.userData.headY = 3.05;
     g.userData.radius = 0.9; g.userData.h = 2.0;
-    g.userData.hp = 46; g.userData.dmg = 26; g.userData.speed = 3.1; g.userData.fireInt = 3.6; g.userData.score = 40;
+    // The toughest thing in the arena: it is a small, moving, hovering core that is
+    // awkward to hit, so it needs real durability to survive incoming fire.
+    g.userData.hp = 120; g.userData.dmg = 30; g.userData.speed = 3.5; g.userData.fireInt = 2.75; g.userData.score = 60;
     g.userData.ai = 'weaver';
     g.userData.hoverY = 3.05; g.userData.spawnY = 8;   // flies in from above
     g.userData.charging = 0;
+    g.userData.evadeT = 0;                            // darts sideways when hit
+    g.userData.evadeDir = new THREE.Vector3();
     g.userData.baseEmissive = 0x2ad8ff;
     g.userData.fx = 0x2ad8ff; g.userData.fxY = 3.0;
   } else {
@@ -1129,6 +1133,7 @@ function findEnemyOf(obj) {
   }
   return null;
 }
+function isLiveWeaver(e) { return e.userData.type === 'weaver' && !e.userData.dead; }
 function damageEnemy(e, dmg, point, headshot) {
   if (e.userData.dead) return;   // idempotent: a corpse takes no more damage (multi-pellet safety)
   e.userData.hp -= dmg;
@@ -1139,6 +1144,12 @@ function damageEnemy(e, dmg, point, headshot) {
   // knockback
   const kb = new THREE.Vector3().subVectors(e.position, player.pos).setY(0).normalize().multiplyScalar(0.35);
   e.position.add(kb);
+  // Weavers are hard to finish: every hit makes one dart sideways (mostly across the
+  // player's view rather than straight away), so sustained fire has to track it.
+  if (isLiveWeaver(e)) {
+    e.userData.evadeDir.set(-kb.z, 0, kb.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1).addScaledVector(kb, 0.6).normalize();
+    e.userData.evadeT = 0.6;
+  }
   if (e.userData.hp <= 0) {
     e.userData.dead = true;
     e.userData.deathT = 0;
@@ -1365,14 +1376,19 @@ function updateWeaver(e, ud, dt, dist) {
   _wv1.copy(player.pos).sub(e.position); _wv1.y = 0;
   _wv2.copy(_wv1).normalize();
   _wv3.set(0, 0, 0);
-  if (dist > 19) _wv3.add(_wv2);
-  else if (dist < 12) _wv3.sub(_wv2);
-  _wv3.x += -_wv2.z * Math.sin(t * 0.62 + ud.seed) * 1.3;      // weave sideways…
-  _wv3.z += _wv2.x * Math.sin(t * 0.62 + ud.seed) * 1.3;
-  _wv3.addScaledVector(_wv2, Math.sin(t * 0.95 + ud.seed * 2.1) * 0.55);   // …and in/out
+  if (ud.evadeT > 0) {
+    ud.evadeT -= dt;
+    _wv3.copy(ud.evadeDir);          // hit reaction: a hard lateral dart, no weaving
+  } else {
+    if (dist > 19) _wv3.add(_wv2);
+    else if (dist < 12) _wv3.sub(_wv2);
+    _wv3.x += -_wv2.z * Math.sin(t * 0.62 + ud.seed) * 1.3;      // weave sideways…
+    _wv3.z += _wv2.x * Math.sin(t * 0.62 + ud.seed) * 1.3;
+    _wv3.addScaledVector(_wv2, Math.sin(t * 0.95 + ud.seed * 2.1) * 0.55);   // …and in/out
+  }
   if (_wv3.lengthSq() > 0.001) {
     _wv3.normalize();
-    steerAround(e, _wv3.x, _wv3.z, ud.speed, dt, ud.radius);
+    steerAround(e, _wv3.x, _wv3.z, ud.speed * (ud.evadeT > 0 ? 1.9 : 1), dt, ud.radius);
   }
 
   // gyroscopic wobble + orbiting shards
@@ -1400,7 +1416,7 @@ function updateWeaver(e, ud, dt, dist) {
   }
   ud.fireCd -= dt;
   if (ud.fireCd <= 0 && dist < 38 && player.alive) {
-    ud.charging = 0.5;                            // telegraph, then lob
+    ud.charging = 0.45;                           // telegraph, then lob
     ud.fireCd = ud.fireInt * (0.85 + Math.random() * 0.4);
   }
 }
@@ -1433,8 +1449,8 @@ function mortarFire(e) {
   const from = e.position.clone(); from.y -= 0.5;      // drops out of the launch pod
   const to = player.pos.clone();
   to.y = 0.1;
-  to.x += (Math.random() - 0.5) * 1.8;                 // loose: area denial, not a sniper
-  to.z += (Math.random() - 0.5) * 1.8;
+  to.x += (Math.random() - 0.5) * 1.2;                 // loose: area denial, not a sniper
+  to.z += (Math.random() - 0.5) * 1.2;
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
   const hd = Math.max(0.01, Math.hypot(dx, dz));
   const tof = Math.max(0.5, hd / 13);                  // exact ballistic arc onto the target point
@@ -1446,7 +1462,7 @@ function mortarFire(e) {
   scene.add(m);
   const mk = takeBlastMark();
   if (mk) { mk.visible = true; mk.position.set(to.x, 0.06, to.z); mk.scale.setScalar(1); }
-  shots.push({ mesh: m, vel: vel, life: tof + 3, dmg: e.userData.dmg, kind: 'mortar', t0: tof, fuse: tof, radius: 3.6, marker: mk });
+  shots.push({ mesh: m, vel: vel, life: tof + 3, dmg: e.userData.dmg, kind: 'mortar', t0: tof, fuse: tof, radius: 4.2, marker: mk });
   mortarsFired++;
   sfx('lob');
 }

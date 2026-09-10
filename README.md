@@ -42,7 +42,7 @@ You spawn in a square arena and face waves of enemies that spawn from the edges.
 | **Bot** | wave 1 | Fast, fragile, keeps its distance and fires inaccurate plasma bolts. |
 | **Tank** | wave 1 | Slow, heavily armoured, closes to ~11 m and hits hard. |
 | **Skitter** | wave 2 | Six-legged ambusher with almost no armour. It sprints in, flares its eye cluster as a tell, then launches a ballistic pounce that hurts on contact. Dodge the landing or drop it mid-air — it telegraphs for half a second before it jumps. |
-| **Weaver** | wave 4 | Floating mortar platform. Hovers above the crates on a figure-eight, then lobs arcing plasma shells that detonate for area damage. A pink ground marker shows the impact point while the shell is airborne, so keep moving and it lands behind you. Its core is the headshot; the spinning rings are just decoration and don't stop bullets. |
+| **Weaver** | wave 4 | Floating mortar platform, and the toughest thing in the arena. Hovers above the crates on a figure-eight, then lobs arcing plasma shells that detonate for area damage. A pink ground marker shows the impact point while the shell is airborne, so keep moving and it lands behind you. It jukes sideways every time it takes a hit, so finishing one takes sustained, tracked fire. Its core is the headshot; the spinning rings are just decoration and don't stop bullets. |
 
 Tanks, skitters and weavers all become more common as the wave number climbs.
 
