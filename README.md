@@ -28,7 +28,8 @@ Click **Enter the Arena** to start, then click the canvas to lock the mouse for 
 | Space | Jump |
 | R | Reload |
 | Q / E | Lean left / right (peek around cover) |
-| Tab / 1-5 | Switch weapons (Tab cycles rifle → shotgun → sniper → battleaxe → lightsaber) |
+| Tab / 1-6 | Switch weapons (Tab cycles rifle → shotgun → sniper → battleaxe → lightsaber → frag) |
+| G | Throw a frag grenade without switching weapons |
 | Esc | Pause |
 
 ## Gameplay
@@ -46,13 +47,15 @@ You spawn in a square arena and face waves of enemies that spawn from the edges.
 
 Tanks, skitters and weavers all become more common as the wave number climbs.
 
-Five weapons are available — three that fire, two that swing:
+Six weapons are available — three that fire, two that swing, and one you throw:
 
 - **Rifle** — automatic, 30-round magazine
 - **Shotgun** — 8 pellets per shot, 6-round magazine
 - **Sniper** — high damage, 5-round magazine, scope overlay
 - **Battleaxe** — 200 damage, cleaves everything in its sweep, but every swing is committed for 1.22s (0.55s wind-up before the blow lands, then recovery). Carrying it slows you to 0.82x speed. Slow, lumbering, and it kills anything it touches outright.
 - **Lightsaber** — 55 damage per swipe, a whole swing in 0.46s, wider sweep. Less damage than the axe and no cleave, but far less committed: it is the safer weapon to be caught holding.
+
+- **Frag** — a thrown grenade: 150 damage in a 6m blast, falling off with distance, on a 1.7s fuse. It arcs, bounces off cover and the arena walls, and detonates on the fuse **or on contact with a hostile**. You get **2 per wave** and no more: reloading never reissues them and neither does swapping weapons. The HUD always shows the allowance, so you can see what is left. Press **G** to throw one without switching weapons. Cover contains the blast — a hostile behind a crate is shielded — and your own frags never hurt you.
 
 Melee weapons never run out of ammo and never need reloading, so they show **∞** on the HUD. Their cost is time — only the strike frame deals damage, so a swing started at the wrong moment is a wasted 1.22s with the axe.
 
