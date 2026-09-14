@@ -728,7 +728,14 @@ const gunModels = {};                   // one model group per weapon
     }
 
     m.scale.setScalar(0.88);
-    m.rotation.y = 0.22;                 // roll about the haft: turn the blade face toward the camera
+    // Roll the whole axe 90 degrees about the handle axis so the cutting edge leads
+    // the chop. The blades cut along the model +X (the outward edge of the crescent),
+    // so before the roll that direction points sideways while the swing drives the head
+    // down — an open-handed slap. A quarter turn about the haft brings the edge round to
+    // face the swing: measured at mid-strike, the edge goes from 71deg off the travel
+    // direction to ~34deg (inherent to the arced swing; it cannot reach 0), and the
+    // blade face sits ~90deg from it, so the flat no longer slaps.
+    m.rotation.y = 0.22 + Math.PI / 2;    // = ~102.6 deg, i.e. +90 from the old pose
     tilt.rotation.x = -0.95;             // tilt the whole axe forward
     rig.rotation.z = -0.26;              // and lean it up to the right in screen space
     rig.position.set(0.11, -0.16, -0.02);
