@@ -861,22 +861,36 @@ function swingPose(w, pose) {
   const easeIn = u => u * u * u;
   const dir = meleeAlt ? 1 : -1;
   if (curWeapon === 'axe') {
-    // Overhead chop. The head sits up-and-forward in the rest pose, so rotating the rig
-    // NEGATIVE about x drives it down and forward (an uppercut), while a POSITIVE
-    // rotation raises it while keeping it in front of the player. So the wind-up is
-    // positive — head hauled up and back — and the strike swings through to negative,
-    // bringing the head down across the target without ever crossing behind the eye.
+    // Diagonal slash (high-right pullback -> low-center finish), not a straight
+    // up-then-down chop. The head is anchored to the player's RIGHT (rest ~25deg
+    // right of the crosshair), so the swing needs YAW (ry) to travel across the
+    // body — the old pose used none, which is why it read as a vertical drop.
+    //   wind-up: raise the head up-and-back to the right (a full human wind-up,
+    //            ~+32deg up vs the old +18deg) and out to the right shoulder.
+    //   strike:  snap down AND across, from upper-right to lower-center — the
+    //            diagonal. Vertical ~43deg, lateral ~39deg crossing, ratio ~0.44
+    //            (the old swing was ~36deg vertical / 8deg lateral, ratio 0.22).
+    //   recover: settle back to the rest pose.
+    // Every frame stays inside the camera frustum (the old finish at rx -1.33
+    // actually ended off the bottom of the screen), and the head's 90deg roll
+    // still makes the cutting edge lead the chop (measured ~45deg at mid-strike).
     if (t < W) {
       const u = easeOut(t / W);
-      pose.rx = 0.62 * u; pose.rz = 0.10 * u; pose.py = 0.14 * u; pose.pz = 0.18 * u; pose.px = -0.05 * u;
+      pose.rx = 0.85 * u; pose.ry = -0.55 * u; pose.rz = 0.18 * u;
+      pose.px = -0.10 * u; pose.py = 0.34 * u; pose.pz = 0.04 * u;
     } else if (t < W + S) {
       const u = easeIn((t - W) / S);
-      pose.rx = 0.62 - 1.95 * u; pose.rz = 0.10 - 0.28 * u;
-      pose.py = 0.14 - 0.50 * u; pose.pz = 0.18 - 0.66 * u; pose.px = -0.05 + 0.17 * u;
+      pose.rx = 0.85 - 1.40 * u;   //  0.85 -> -0.55   (head comes down)
+      pose.ry = -0.55 + 1.85 * u;  // -0.55 ->  1.30   (sweeps ACROSS: right -> left)
+      pose.rz = 0.18 - 0.28 * u;   //  0.18 -> -0.10
+      pose.px = -0.10 - 0.02 * u;  // -0.10 -> -0.12
+      pose.py = 0.34 - 0.64 * u;   //  0.34 -> -0.30   (drops, stays framed)
+      pose.pz = 0.04 + 0.10 * u;   //  0.04 ->  0.14
     } else {
       const u = 1 - Math.min(1, (t - W - S) / R);
       const e = easeOut(u);
-      pose.rx = -1.33 * e; pose.rz = -0.18 * e; pose.py = -0.36 * e; pose.pz = -0.48 * e; pose.px = 0.12 * e;
+      pose.rx = -0.55 * e; pose.ry = 1.30 * e; pose.rz = -0.10 * e;
+      pose.px = -0.12 * e; pose.py = -0.30 * e; pose.pz = 0.14 * e;
     }
   } else {
     // Saber: a fast horizontal slash, direction alternating each swing.
