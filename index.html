@@ -582,34 +582,164 @@ const gunModels = {};                   // one model group per weapon
   }
 
   // --- BATTLEAXE ---
-  // Deliberately oversized: a two-handed haft with a double-bit head and a spike.
+  // Modelled in a natural frame — haft along +Y, head at the top, blades lying in the
+  // XY plane — then posed with the nested groups below (lean, then tilt) so the head
+  // reads in silhouette instead of pointing away down the barrel of the camera.
+  //
+  // The blades are EXTRUDED 2D PROFILES, not boxes: a crescent with a convex cutting
+  // edge and a horn at each end, the way a real bearded axe blade is shaped. The
+  // extrusion takes two materials, and ExtrudeGeometry assigns the flat faces to
+  // material 0 and the extruded rim (the bevel) to material 1 — so the flat of the
+  // blade is dark steel while the edge around it comes out as bright polished metal.
   {
-    const g = new THREE.Group();
-    const steel = new THREE.MeshStandardMaterial({ color: 0x93a1b2, roughness: 0.32, metalness: 0.95 });
-    const steelDark = new THREE.MeshStandardMaterial({ color: 0x46515e, roughness: 0.5, metalness: 0.85 });
-    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.042, 1.05, 10), wood);
-    haft.rotation.x = Math.PI / 2; haft.position.set(0, 0, -0.42);
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 10), steelDark);
-    collar.rotation.x = Math.PI / 2; collar.position.set(0, 0, -0.9);
-    // double-bit head: two blades fanning off the collar, plus a forward spike
-    const bladeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.3), steel);
-    bladeL.position.set(-0.19, 0.03, -0.98); bladeL.rotation.z = 0.22;
-    const bladeR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.3), steel);
-    bladeR.position.set(0.19, 0.03, -0.98); bladeR.rotation.z = -0.22;
-    const edgeL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.4, 0.06), new THREE.MeshStandardMaterial({ color: 0xdce8f5, roughness: 0.15, metalness: 1 }));
-    edgeL.position.set(-0.22, 0.03, -1.11);
-    const edgeR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.4, 0.06), new THREE.MeshStandardMaterial({ color: 0xdce8f5, roughness: 0.15, metalness: 1 }));
-    edgeR.position.set(0.22, 0.03, -1.11);
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.2, 8), steel);
-    spike.rotation.x = -Math.PI / 2; spike.position.set(0, 0, -1.22);
-    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.16, 8), steelDark);
-    wrap.rotation.x = Math.PI / 2; wrap.position.set(0, 0, -0.66);
-    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.17), skin);
-    hand.position.set(0, -0.02, 0.02);
-    const hand2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.17), skin);
-    hand2.position.set(0, -0.02, -0.28);
-    g.add(haft, collar, bladeL, bladeR, edgeL, edgeR, spike, wrap, hand, hand2);
-    gunModels.axe = g;
+    const rig = new THREE.Group();     // screen-space lean
+    const tilt = new THREE.Group();    // forward tilt
+    const m = new THREE.Group();       // the axe itself, in its natural frame
+    tilt.add(m); rig.add(tilt);
+
+    // Materials matter more than they look like they should here. A high-metalness
+    // material with no environment map is lit almost purely by specular, so its base
+    // colour barely shows and a smooth face reads BRIGHT while an angled rim reads
+    // black — the opposite of the intended look. So: the blade face is a mid-metalness
+    // dark iron (reads dark, with some sheen), and only the edge stays full-metalness
+    // so it catches highlights and reads as polished.
+    const bladeFaceTex = canvasTex((ctx, w, h) => {          // forge scale: mottled, not flat
+      ctx.fillStyle = '#525c6a'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 900; i++) {
+        const g = 40 + Math.random() * 90 | 0;
+        ctx.fillStyle = 'rgba(' + g + ',' + (g + 6) + ',' + (g + 14) + ',' + (Math.random() * 0.35) + ')';
+        ctx.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 3, 1 + Math.random() * 2);
+      }
+      ctx.strokeStyle = 'rgba(20,24,30,0.5)'; ctx.lineWidth = 1;
+      for (let i = 0; i < 26; i++) {                          // hammer streaks
+        const y = Math.random() * h;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y + (Math.random() - 0.5) * 10); ctx.stroke();
+      }
+    }, 256, 256);
+    const haftTex = canvasTex((ctx, w, h) => {               // wood grain
+      ctx.fillStyle = '#744a22'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 90; i++) {
+        const x = Math.random() * w;
+        ctx.strokeStyle = 'rgba(' + (30 + Math.random() * 40 | 0) + ',' + (18 + Math.random() * 22 | 0) + ',8,' + (0.15 + Math.random() * 0.4) + ')';
+        ctx.lineWidth = 1 + Math.random() * 3;
+        ctx.beginPath(); ctx.moveTo(x, 0);
+        ctx.bezierCurveTo(x + (Math.random() - 0.5) * 24, h * 0.33, x + (Math.random() - 0.5) * 24, h * 0.66, x + (Math.random() - 0.5) * 16, h);
+        ctx.stroke();
+      }
+    }, 256, 256);
+    const gripTex = canvasTex((ctx, w, h) => {               // leather wrap
+      ctx.fillStyle = '#3d2e21'; ctx.fillRect(0, 0, w, h);
+      for (let i = 0; i < 40; i++) {
+        ctx.strokeStyle = 'rgba(90,70,52,' + (0.10 + Math.random() * 0.22) + ')';
+        ctx.lineWidth = 3 + Math.random() * 5;
+        ctx.beginPath();
+        const y = i * (h / 40);
+        ctx.moveTo(0, y); ctx.lineTo(w, y + h / 40);          // diagonal cross-wrap
+        ctx.stroke();
+      }
+      for (let i = 0; i < 500; i++) {
+        ctx.fillStyle = 'rgba(0,0,0,' + (Math.random() * 0.25) + ')';
+        ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+      }
+    }, 256, 256);
+    // No environment map in this project, so metalness must stay LOW: a fully metallic
+    // material has no diffuse term and renders black except for a narrow specular
+    // highlight. The face is therefore near-diffuse dark iron and the edge keeps only
+    // enough metalness to glint — which is what makes the edge read brighter than the
+    // face. Colour lives in the textures (map multiplies color, so keep color white).
+    const steel = new THREE.MeshStandardMaterial({ map: bladeFaceTex, color: 0xffffff, roughness: 0.58, metalness: 0.22, side: THREE.DoubleSide });
+    const edgeM = new THREE.MeshStandardMaterial({ color: 0xf6fbff, roughness: 0.14, metalness: 0.36, side: THREE.DoubleSide });
+    const iron = new THREE.MeshStandardMaterial({ color: 0x4c5560, roughness: 0.5, metalness: 0.4 });
+    const haftM = new THREE.MeshStandardMaterial({ map: haftTex, color: 0xffffff, roughness: 0.66, metalness: 0.04 });
+    const wrapM = new THREE.MeshStandardMaterial({ map: gripTex, color: 0xffffff, roughness: 0.85, metalness: 0.04 });
+
+    // --- haft: tapered, leather grip under the head, iron ferrule and pommel ---
+    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.027, 1.06, 12), haftM);
+    haft.position.y = -0.03;
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.0295, 0.0295, 0.20, 12), wrapM);
+    grip.position.y = 0.13;
+    m.add(haft, grip);
+    for (const y of [0.243, 0.016]) {                     // ferrules either side of the grip
+      const fer = new THREE.Mesh(new THREE.CylinderGeometry(0.0305, 0.0305, 0.023, 12), iron);
+      fer.position.y = y; m.add(fer);
+    }
+    const pommel = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.0345, 0.062, 12), iron);
+    pommel.position.y = -0.585;
+    const pommelRing = new THREE.Mesh(new THREE.TorusGeometry(0.0315, 0.0075, 6, 14), iron);
+    pommelRing.rotation.x = Math.PI / 2; pommelRing.position.y = -0.552;
+    m.add(pommel, pommelRing);
+
+    // --- head: forged eye around the haft, one crescent blade per side, top spike ---
+    const head = new THREE.Group();
+    head.position.y = 0.44;
+    const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.0445, 0.0445, 0.135, 10), iron);
+    const eyeBox = new THREE.Mesh(new THREE.BoxGeometry(0.088, 0.15, 0.064), iron);
+    head.add(eye, eyeBox);
+
+    // thin stock with a small bevel: a broad 0.07-thick slab reads as a blunt block,
+    // a 0.03-thick one reads as a sharpened edge
+    const extrude = { depth: 0.030, bevelEnabled: true, bevelThickness: 0.009, bevelSize: 0.011, bevelSegments: 2, curveSegments: 14 };
+    // crescent blade profile, authored for the +X side and mirrored by negating x
+    function bladeShape(sign) {
+      const s = new THREE.Shape();
+      s.moveTo(sign * 0.038, 0.075);
+      s.quadraticCurveTo(sign * 0.20, 0.175, sign * 0.315, 0.205);     // sweep up and out to the upper horn
+      s.quadraticCurveTo(sign * 0.450, 0.100, sign * 0.458, -0.020);   // convex cutting edge, upper half
+      s.quadraticCurveTo(sign * 0.462, -0.140, sign * 0.352, -0.215);  // convex cutting edge, lower half
+      s.quadraticCurveTo(sign * 0.272, -0.252, sign * 0.205, -0.200);  // beard: hook back in below the blade
+      s.quadraticCurveTo(sign * 0.110, -0.128, sign * 0.038, -0.075);  // concave spine back to the neck
+      s.lineTo(sign * 0.038, 0.075);
+      return s;
+    }
+    for (const sign of [1, -1]) {
+      const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(bladeShape(sign), extrude), [steel, edgeM]);
+      blade.position.z = -0.015;                                         // centre the thin blade on the haft
+      head.add(blade);
+    }
+    const spikeShape = new THREE.Shape();                                // narrow spike above the blades
+    spikeShape.moveTo(-0.036, 0.060);
+    spikeShape.quadraticCurveTo(-0.013, 0.200, 0, 0.300);
+    spikeShape.quadraticCurveTo(0.013, 0.200, 0.036, 0.060);
+    spikeShape.lineTo(-0.036, 0.060);
+    const spike = new THREE.Mesh(new THREE.ExtrudeGeometry(spikeShape, {
+      depth: 0.026, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2, curveSegments: 12
+    }), [steel, edgeM]);
+    spike.position.z = -0.013;
+    head.add(spike);
+    // langets: iron straps running down the haft from the head, and rivets through the eye
+    for (const sx of [1, -1]) {
+      const langet = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.22, 0.030), edgeM);
+      langet.position.set(sx * 0.031, 0.325, 0);
+      m.add(langet);
+    }
+    for (const sz of [1, -1]) {
+      const rivet = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.098, 8), iron);
+      rivet.rotation.x = Math.PI / 2;
+      rivet.position.set(0, 0.44, sz * 0.030);
+      m.add(rivet);
+    }
+    m.add(head);
+
+    // two gloved hands wrapped round the haft
+    for (const y of [-0.075, -0.30]) {
+      const fist = new THREE.Mesh(new THREE.BoxGeometry(0.098, 0.115, 0.145), skin);
+      fist.position.set(0.004, y, 0.004);
+      m.add(fist);
+    }
+
+    m.scale.setScalar(0.88);
+    // Roll the whole axe 90 degrees about the handle axis so the cutting edge leads
+    // the chop. The blades cut along the model +X (the outward edge of the crescent),
+    // so before the roll that direction points sideways while the swing drives the head
+    // down — an open-handed slap. A quarter turn about the haft brings the edge round to
+    // face the swing: measured at mid-strike, the edge goes from 71deg off the travel
+    // direction to ~34deg (inherent to the arced swing; it cannot reach 0), and the
+    // blade face sits ~90deg from it, so the flat no longer slaps.
+    m.rotation.y = 0.22 + Math.PI / 2;    // = ~102.6 deg, i.e. +90 from the old pose
+    tilt.rotation.x = -0.95;             // tilt the whole axe forward
+    rig.rotation.z = -0.26;              // and lean it up to the right in screen space
+    rig.position.set(0.11, -0.16, -0.02);
+    gunModels.axe = rig;
   }
 
   // --- LIGHTSABER ---
@@ -731,18 +861,36 @@ function swingPose(w, pose) {
   const easeIn = u => u * u * u;
   const dir = meleeAlt ? 1 : -1;
   if (curWeapon === 'axe') {
-    // Overhead chop: hauled up and back, then driven down through the target.
+    // Diagonal slash (high-right pullback -> low-center finish), not a straight
+    // up-then-down chop. The head is anchored to the player's RIGHT (rest ~25deg
+    // right of the crosshair), so the swing needs YAW (ry) to travel across the
+    // body — the old pose used none, which is why it read as a vertical drop.
+    //   wind-up: raise the head up-and-back to the right (a full human wind-up,
+    //            ~+32deg up vs the old +18deg) and out to the right shoulder.
+    //   strike:  snap down AND across, from upper-right to lower-center — the
+    //            diagonal. Vertical ~43deg, lateral ~39deg crossing, ratio ~0.44
+    //            (the old swing was ~36deg vertical / 8deg lateral, ratio 0.22).
+    //   recover: settle back to the rest pose.
+    // Every frame stays inside the camera frustum (the old finish at rx -1.33
+    // actually ended off the bottom of the screen), and the head's 90deg roll
+    // still makes the cutting edge lead the chop (measured ~45deg at mid-strike).
     if (t < W) {
       const u = easeOut(t / W);
-      pose.rx = -1.55 * u; pose.rz = 0.3 * u; pose.py = 0.24 * u; pose.pz = 0.16 * u; pose.px = -0.06 * u;
+      pose.rx = 0.85 * u; pose.ry = -0.55 * u; pose.rz = 0.18 * u;
+      pose.px = -0.10 * u; pose.py = 0.34 * u; pose.pz = 0.04 * u;
     } else if (t < W + S) {
       const u = easeIn((t - W) / S);
-      pose.rx = -1.55 + 2.75 * u; pose.rz = 0.3 - 0.45 * u;
-      pose.py = 0.24 - 0.62 * u; pose.pz = 0.16 - 0.55 * u; pose.px = -0.06 + 0.16 * u;
+      pose.rx = 0.85 - 1.40 * u;   //  0.85 -> -0.55   (head comes down)
+      pose.ry = -0.55 + 1.85 * u;  // -0.55 ->  1.30   (sweeps ACROSS: right -> left)
+      pose.rz = 0.18 - 0.28 * u;   //  0.18 -> -0.10
+      pose.px = -0.10 - 0.02 * u;  // -0.10 -> -0.12
+      pose.py = 0.34 - 0.64 * u;   //  0.34 -> -0.30   (drops, stays framed)
+      pose.pz = 0.04 + 0.10 * u;   //  0.04 ->  0.14
     } else {
       const u = 1 - Math.min(1, (t - W - S) / R);
       const e = easeOut(u);
-      pose.rx = 1.2 * e; pose.rz = -0.15 * e; pose.py = -0.38 * e; pose.pz = -0.39 * e; pose.px = 0.1 * e;
+      pose.rx = -0.55 * e; pose.ry = 1.30 * e; pose.rz = -0.10 * e;
+      pose.px = -0.12 * e; pose.py = -0.30 * e; pose.pz = 0.14 * e;
     }
   } else {
     // Saber: a fast horizontal slash, direction alternating each swing.
